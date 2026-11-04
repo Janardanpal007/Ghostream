@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 9 to 11: what goes into the backup to the user's Google account (only when it is end-to-end encrypted). -->
+<full-backup-content>
+    <include domain="file" path="browser/bookmarks.json" requireFlags="clientSideEncryption" />
+    <include domain="file" path="browser/history.json" requireFlags="clientSideEncryption" />
+    <include domain="file" path="browser/session.json" requireFlags="clientSideEncryption" />
+    <include domain="file" path="browser/stats.json" requireFlags="clientSideEncryption" />
+    <include domain="file" path="settings.json" requireFlags="clientSideEncryption" />
+    <include domain="file" path="passwords.restore" requireFlags="clientSideEncryption" />
+</full-backup-content>

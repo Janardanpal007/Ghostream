@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and later: the backup to the user's Google account (skipped unless it is end-to-end encrypted) and
+     copying to a new phone. Bookmarks, history, tabs, settings and saved passwords; not downloads or cookies. -->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <include domain="file" path="browser/bookmarks.json" />
+        <include domain="file" path="browser/history.json" />
+        <include domain="file" path="browser/session.json" />
+        <include domain="file" path="browser/stats.json" />
+        <include domain="file" path="settings.json" />
+        <include domain="file" path="passwords.restore" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="browser/bookmarks.json" />
+        <include domain="file" path="browser/history.json" />
+        <include domain="file" path="browser/session.json" />
+        <include domain="file" path="browser/stats.json" />
+        <include domain="file" path="settings.json" />
+        <include domain="file" path="passwords.restore" />
+    </device-transfer>
+</data-extraction-rules>

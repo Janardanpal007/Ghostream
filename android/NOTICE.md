@@ -1,0 +1,28 @@
+# Ghostream for Android: licence and third-party notices
+
+Ghostream for Android is Copyright © 2026 Janardan/TSE and is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License, version 3** ([LICENSE](LICENSE)). It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+The Android app's complete source code is published at <https://github.com/Janardanpal007/Ghostream/tree/main/android>.
+
+The Android app is licensed under the GPL because it includes youtubedl-android, which is GPL-3.0. The desktop apps (Windows, macOS, Linux) and the browser extension are separate programs and are not covered by this licence.
+
+## Included software
+
+| Component | Used for | Licence |
+|---|---|---|
+| [youtubedl-android](https://github.com/yausername/youtubedl-android) | Runs yt-dlp on Android | GPL-3.0 |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | YouTube and other video sites | The Unlicense |
+| [Python](https://www.python.org/) (bundled by youtubedl-android) | Runs yt-dlp | Python Software Foundation License |
+| [FFmpeg](https://ffmpeg.org/) (bundled by youtubedl-android) | Joining video and audio, converting to MP3 | LGPL/GPL; source: <https://ffmpeg.org/download.html> and <https://github.com/yausername/youtubedl-android> |
+| [QuickJS](https://bellard.org/quickjs/) (bundled by youtubedl-android) | JavaScript that YouTube's player needs | MIT |
+| [libtorrent](https://libtorrent.org/) via [libtorrent4j](https://github.com/aldenml/libtorrent4j) | Torrents and magnet links | BSD-3-Clause / MIT |
+| [OkHttp](https://square.github.io/okhttp/) | HTTP downloads and proxy | Apache-2.0 |
+| [Kotlin](https://kotlinlang.org/), [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines), [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) | Language and libraries | Apache-2.0 |
+| [AndroidX and Jetpack Compose](https://developer.android.com/jetpack/androidx) | Screens and Android integration | Apache-2.0 |
+| [Material Icons](https://github.com/google/material-design-icons) (path data) | Icons | Apache-2.0 |
+| [uBlock Origin filter lists](https://github.com/uBlockOrigin/uAssets) (uBlock filters, Privacy, Badware risks, Unbreak, Quick fixes) | Ad, pop-up and tracker blocking in the browser, including their scriptlet rules (run by our own assets/scriptlets.js) (bundled, updated in the background) | GPL-3.0 |
+| [EasyList and EasyPrivacy](https://easylist.to/) | Ad and tracker blocking in the browser (bundled, updated in the background) | GPL-3.0 or CC BY-SA 3.0 |
+| [Peter Lowe's ad and tracking server list](https://pgl.yoyo.org/adservers/) | Ad and tracker blocking (downloaded from its site, not bundled) | see its [policy](https://pgl.yoyo.org/adservers/policy.php) |
+| [Space Grotesk](https://github.com/floriankarsten/space-grotesk), [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono), [Inter](https://github.com/rsms/inter) | Typefaces | SIL Open Font License 1.1 |
+
+The app icon is an original drawing made by `scripts/make-icon.js`. The ad blocker reads the filter lists itself (Ghostream's own engine, in the uBlock Origin / Adblock Plus filter syntax); uBlock Origin's code is not included. Ghostream's own short tracker list is shared with the browser extension.
