@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghostream: browse, watch and save, in one app</title>
+<meta name="description" content="Ghostream is an Android browser with video downloads, torrents and a built-in ad blocker. Free and open source.">
+<style>
+  :root {
+    --bg: #07070A;
+    --panel: #111116;
+    --panel-2: #17171E;
+    --line: #23232C;
+    --ink: #F4F4F7;
+    --muted: #8D8D9A;
+    --accent: #7CFFB2;
+    --accent-ink: #04140C;
+    --warm: #FF8A5B;
+    --radius: 22px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.55; overflow-x: hidden;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+  /* top bar */
+  header { position: sticky; top: 0; z-index: 5; background: rgba(7,7,10,.82); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .bar { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .02em; text-decoration: none; }
+  .logo i { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), #3EC9FF); display: inline-block; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px; font-weight: 700; font-size: 15px; text-decoration: none; border: 1px solid var(--line); }
+  .pill.solid { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+  /* hero */
+  .hero { display: grid; gap: 40px; padding: 56px 0 64px; align-items: center; }
+  .eyebrow { display: inline-block; padding: 6px 12px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  h1 { font-size: clamp(38px, 7vw, 68px); line-height: 1.02; letter-spacing: -.03em; margin: 16px 0 14px; font-weight: 800; }
+  h1 span { color: var(--accent); }
+  .lead { color: var(--muted); font-size: 18px; max-width: 520px; margin: 0 0 26px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .cta .pill { padding: 14px 22px; }
+  .meta { margin-top: 18px; color: var(--muted); font-size: 14px; }
+
+  /* search-style bar from the reference: rounded, dark, icon left */
+  .search { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 12px 16px; margin: 0 0 28px; max-width: 520px; color: var(--muted); }
+  .search b { color: var(--ink); font-weight: 600; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .chip { padding: 8px 14px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+  .chip.on { background: var(--ink); color: var(--bg); border-color: transparent; font-weight: 700; }
+
+  /* phone mock built with CSS only */
+  .phone { justify-self: center; width: min(300px, 80vw); aspect-ratio: 9 / 19; background: #000; border: 10px solid #1B1B22; border-radius: 42px; padding: 18px 14px; box-shadow: 0 30px 80px rgba(124,255,178,.12); position: relative; }
+  .phone::before { content: ""; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 84px; height: 22px; border-radius: 999px; background: #1B1B22; }
+  .screen { margin-top: 26px; display: grid; gap: 10px; }
+  .row { display: flex; gap: 8px; }
+  .card { border-radius: 16px; overflow: hidden; background: var(--panel-2); }
+  .thumb { aspect-ratio: 16/10; background: linear-gradient(135deg, #2A3B33, #0D1412); position: relative; }
+  .thumb.b { background: linear-gradient(135deg, #3B2A36, #120D14); }
+  .thumb.c { background: linear-gradient(135deg, #3A3322, #14110A); }
+  .thumb .dl { position: absolute; right: 8px; bottom: 8px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 800; padding: 4px 8px; border-radius: 999px; }
+  .cap { padding: 8px 10px; font-size: 12px; color: var(--ink); }
+  .cap small { display: block; color: var(--muted); font-size: 11px; }
+  .bottombar { position: absolute; left: 14px; right: 14px; bottom: 14px; display: flex; justify-content: space-around; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 10px; font-size: 12px; color: var(--muted); }
+  .bottombar b { color: var(--accent); }
+
+  /* sections */
+  section { padding: 56px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(28px, 4.5vw, 40px); letter-spacing: -.02em; margin: 0 0 10px; line-height: 1.1; }
+  .sub { color: var(--muted); margin: 0 0 28px; max-width: 620px; }
+  .grid { display: grid; gap: 14px; }
+  .feature { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
+  .feature .ico { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: var(--panel-2); margin-bottom: 14px; color: var(--accent); font-weight: 800; }
+  .feature h3 { margin: 0 0 6px; font-size: 18px; }
+  .feature p { margin: 0; color: var(--muted); font-size: 15px; }
+
+  .steps { counter-reset: s; display: grid; gap: 14px; list-style: none; padding: 0; margin: 0; }
+  .steps li { counter-increment: s; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 18px 18px 64px; position: relative; color: var(--muted); }
+  .steps li::before { content: counter(s); position: absolute; left: 18px; top: 16px; width: 32px; height: 32px; border-radius: 50%; background: var(--ink); color: var(--bg); font-weight: 800; display: grid; place-items: center; }
+  .steps b { color: var(--ink); }
+
+  .download { background: linear-gradient(160deg, #101A15, var(--panel)); border: 1px solid #1E3327; border-radius: 28px; padding: 32px 22px; display: grid; gap: 22px; text-align: left; }
+  .download h2 { margin: 0; }
+  .download .sub { margin: 0; }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 14px; }
+  .facts b { color: var(--ink); }
+  .alt { color: var(--muted); font-size: 14px; }
+  .alt a { color: var(--accent); }
+
+  footer { padding: 28px 0 40px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+  footer a { color: var(--ink); }
+
+  @media (min-width: 760px) {
+    .hero { grid-template-columns: 1.05fr .95fr; padding: 80px 0 88px; }
+    .grid.three { grid-template-columns: repeat(3, 1fr); }
+    .grid.two { grid-template-columns: repeat(2, 1fr); }
+    .download { grid-template-columns: 1.3fr 1fr; align-items: center; padding: 44px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="logo" href="#top"><i aria-hidden="true"></i>Ghostream</a>
+    <a class="pill solid" href="#download">Get the APK</a>
+  </div>
+</header>
+
+<main id="top" class="wrap">
+
+  <div class="hero">
+    <div>
+      <span class="eyebrow">Android · free · open source</span>
+      <h1>Browse, watch and save <span>without the noise.</span></h1>
+      <p class="lead">A fast browser for your phone that blocks ads, catches videos and torrents, and saves everything into neat folders.</p>
+
+      <div class="search" role="presentation">
+        <span aria-hidden="true">⌕</span>
+        <span>Search or paste a link, <b>video</b>, <b>torrent</b>…</span>
+      </div>
+
+      <div class="cta">
+        <a class="pill solid" href="#download">Download APK</a>
+        <a class="pill" href="#features">See features</a>
+      </div>
+      <p class="meta">Android 8.0 to 17 · about 50 MB · no account needed</p>
+    </div>
+
+    <div class="phone" aria-hidden="true">
+      <div class="screen">
+        <div class="chips"><span class="chip on">All</span><span class="chip">Videos</span><span class="chip">Torrents</span><span class="chip">Music</span></div>
+        <div class="row">
+          <div class="card" style="flex:1"><div class="thumb"><span class="dl">Saved</span></div><div class="cap">Trailer, 1080p<small>Videos · 214 MB</small></div></div>
+          <div class="card" style="flex:1"><div class="thumb b"><span class="dl">Saving</span></div><div class="cap">Album pack<small>Music · 62%</small></div></div>
+        </div>
+        <div class="row">
+          <div class="card" style="flex:1"><div class="thumb c"><span class="dl">4K</span></div><div class="cap">Lecture notes<small>Documents</small></div></div>
+          <div class="card" style="flex:1"><div class="thumb"><span class="dl">Blocked 12</span></div><div class="cap">News site<small>Ads stopped</small></div></div>
+        </div>
+      </div>
+      <div class="bottombar"><span>Browse</span><b>Downloads</b><span>Settings</span></div>
+    </div>
+  </div>
+
+  <section id="features">
+    <h2>Everything in one place</h2>
+    <p class="sub">Ghostream is a browser first, and a download manager built right into it.</p>
+    <div class="grid three">
+      <div class="feature"><div class="ico">◎</div><h3>Built-in browser</h3><p>Open any site in tabs, with bookmarks, private tabs and a fast omnibox for links and search.</p></div>
+      <div class="feature"><div class="ico">↓</div><h3>Video and file saving</h3><p>Save videos from supported sites in the quality you pick, or any file from a direct link. Downloads keep going in the background.</p></div>
+      <div class="feature"><div class="ico">⌁</div><h3>Torrents</h3><p>Open a magnet link or a .torrent file and download it, with progress in the notification bar.</p></div>
+      <div class="feature"><div class="ico">⊘</div><h3>Ad blocker</h3><p>Blocks ads and trackers in the browser using well-known open filter lists.</p></div>
+      <div class="feature"><div class="ico">▦</div><h3>Sorted folders</h3><p>Files land in folders for Videos, Music, Documents, Torrents and more, so nothing ends up in a pile.</p></div>
+      <div class="feature"><div class="ico">↗</div><h3>Share to Ghostream</h3><p>Tap Share on a link in any app and send it straight to Ghostream.</p></div>
+    </div>
+  </section>
+
+  <section id="how">
+    <h2>Get started in 3 steps</h2>
+    <p class="sub">About a minute, and no account to create.</p>
+    <ol class="steps">
+      <li><b>Download the APK</b> from the button below and open it.</li>
+      <li><b>Allow installs</b> from your browser when Android asks, then tap <b>Install</b>.</li>
+      <li><b>Open Ghostream</b>, allow notifications, and start browsing.</li>
+    </ol>
+  </section>
+
+  <section id="download">
+    <div class="download">
+      <div>
+        <h2>Ready when you are</h2>
+        <p class="sub">Free and open source. Pick the universal file if you are not sure which one your phone needs.</p>
+        <div class="cta" style="margin-top:20px">
+          <a class="pill solid" href="https://github.com/Janardanpal007/Ghostream/releases/latest/download/Ghostream-1.3.4-android-universal.apk">Download APK</a>
+          <a class="pill" href="https://github.com/Janardanpal007/Ghostream/releases/latest">All versions</a>
+        </div>
+      </div>
+      <div>
+        <div class="facts">
+          <span><b>Version</b> 1.3.4</span>
+          <span><b>Android</b> 8.0 to 17</span>
+          <span><b>Size</b> about 50 MB</span>
+        </div>
+        <p class="alt" style="margin-top:14px">Phone with a 64-bit chip (almost every phone): <a href="https://github.com/Janardanpal007/Ghostream/releases/latest/download/Ghostream-1.3.4-android-arm64.apk">arm64 APK</a></p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Ghostream · Free software under the GNU GPL v3 · <a href="https://github.com/Janardanpal007/Ghostream">Source code on GitHub</a>
+  </div>
+</footer>
+
+</body>
+</html>
