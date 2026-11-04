@@ -131,10 +131,6 @@
   .f h3 { font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.05; margin: 0 0 10px; }
   .f p { color: var(--muted); margin: 0; font-size: 14px; }
 
-  /* ===== video ===== */
-  .vid { display: grid; gap: 40px; align-items: center; }
-  .reel { justify-self: center; width: min(330px, 80vw); border-radius: 34px; padding: 8px; background: #0e1120; border: 1px solid var(--line); box-shadow: 0 40px 100px rgba(0,0,0,.6), 0 0 80px rgba(255,59,79,.12); }
-  .reel video { width: 100%; aspect-ratio: 9 / 16; border-radius: 27px; display: block; background: #000; }
 
   /* ===== screens ===== */
   .strip { display: flex; gap: 18px; overflow-x: auto; padding: 50px 4px 24px; scroll-snap-type: x mandatory; scrollbar-width: thin; }
@@ -173,7 +169,6 @@
     .stack { grid-template-columns: .8fr 1.2fr; }
     .step { grid-template-columns: 1fr auto; }
     .grid { grid-template-columns: repeat(3, 1fr); }
-    .vid { grid-template-columns: 1.1fr .9fr; }
     .install { grid-template-columns: repeat(3, 1fr); }
     .facts { grid-template-columns: repeat(4, 1fr); }
   }
@@ -207,7 +202,6 @@
     <nav>
       <a href="#how">How it works</a>
       <a href="#features">Features</a>
-      <a href="#video">Video</a>
       <a href="#screens">Screens</a>
     </nav>
     <a class="pill red" href="#get">Download</a>
@@ -229,7 +223,7 @@
   <div class="card reveal" id="heroCard">
     <div class="label"><b>01</b> &nbsp;/&nbsp; Android browser &nbsp;·&nbsp; v<span id="hero-ver">1.3.8</span></div>
     <h1 class="split">Browse. Block. Download. <em>Feel safe.</em></h1>
-    <p>Ghostream blocks ads and trackers before they load, plays YouTube without ads, and saves files in 8 parts at once. Free, open source, no account.</p>
+    <p>Ghostream blocks ads and trackers before they load, plays YouTube without ads, and saves files in 8 parts at once. Free, and no account needed.</p>
     <div class="cta">
       <a class="pill red" href="#get">Download APK &nbsp;→</a>
       <a class="pill" href="#how">See how it works</a>
@@ -331,21 +325,7 @@
         <div class="f reveal"><span class="label">03</span><h3>8-part downloads</h3><p>Faster files, with pause and resume.</p></div>
         <div class="f reveal"><span class="label">04</span><h3>Reader mode</h3><p>Just the article, in clean text.</p></div>
         <div class="f reveal"><span class="label">05</span><h3>Video &amp; torrents</h3><p>Save videos in the quality you pick. Open magnet links.</p></div>
-        <div class="f reveal"><span class="label">06</span><h3>Free &amp; open source</h3><p>GPL-3.0. Read the code, build it yourself.</p></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Video -->
-  <section id="video">
-    <div class="wrap vid">
-      <div class="reveal">
-        <div class="label"><b>04</b> &nbsp;/&nbsp; Watch</div>
-        <h2 class="split">Ghostream in <em>one minute.</em></h2>
-        <p class="sub">Five rounds: ads, YouTube, downloads, reading and privacy. Every screen in the video is the real app.</p>
-      </div>
-      <div class="reel reveal">
-        <video src="video/ghostream-promo.mp4" poster="video/poster.jpg" controls playsinline preload="metadata" aria-label="Ghostream promo video with voiceover"></video>
+        <div class="f reveal"><span class="label">06</span><h3>Free, no account</h3><p>Nothing to pay and nothing to sign up for.</p></div>
       </div>
     </div>
   </section>
@@ -354,7 +334,7 @@
   <section id="screens">
     <div class="wrap">
       <div class="reveal">
-        <div class="label"><b>05</b> &nbsp;/&nbsp; Screens</div>
+        <div class="label"><b>04</b> &nbsp;/&nbsp; Screens</div>
         <h2 class="split">Real screens, <em>not mockups.</em></h2>
       </div>
       <div class="strip reveal">
@@ -374,9 +354,9 @@
   <section id="get">
     <div class="wrap">
       <div class="get reveal">
-        <div class="label"><b>06</b> &nbsp;/&nbsp; Get Ghostream</div>
+        <div class="label"><b>05</b> &nbsp;/&nbsp; Get Ghostream</div>
         <h2 class="split">Start browsing <em>safely.</em></h2>
-        <p class="sub">Free and open source. Pick arm64 for most phones, or universal if you are not sure.</p>
+        <p class="sub">It's free. Most phones need the arm64 file. Not sure? Grab the universal one.</p>
         <div class="cta">
           <a class="pill red" id="dl-arm64" href="https://github.com/Janardanpal007/Ghostream/releases/latest/download/Ghostream-1.3.8-android-arm64.apk">Download arm64 APK &nbsp;→</a>
           <a class="pill" id="dl-universal" href="https://github.com/Janardanpal007/Ghostream/releases/latest/download/Ghostream-1.3.8-android-universal.apk">Universal APK</a>
@@ -402,8 +382,6 @@
 <footer>
   <div class="wrap foot">
     <div class="links">
-      <a href="https://github.com/Janardanpal007/Ghostream">GitHub</a>
-      <a href="https://github.com/Janardanpal007/Ghostream/tree/main/android">Source code</a>
       <a href="https://github.com/Janardanpal007/Ghostream/releases">Changelog</a>
       <a href="https://github.com/Janardanpal007">Developer</a>
     </div>
