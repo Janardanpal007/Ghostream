@@ -1,6 +1,6 @@
 # Ghostream
 
-**Browse. Block. Download.**
+**Browse. Block. Download. Feel safe.**
 
 Ghostream is a free, open-source Android browser. It blocks ads and trackers, saves videos and files in fast multi-part downloads, and has a reader mode for clean reading.
 
