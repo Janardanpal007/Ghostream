@@ -9,14 +9,15 @@ Ghostream is a free, open-source Android browser. It blocks ads and trackers, sa
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/home.png" width="22%" alt="Start page">
   <img src="screenshots/browse.png" width="22%" alt="Browsing a web page">
+  <img src="screenshots/youtube-portrait.png" width="22%" alt="YouTube with no ads">
   <img src="screenshots/download.png" width="22%" alt="Add a link panel with 8 parts and pause/resume">
-  <img src="screenshots/reader.png" width="22%" alt="Reader mode">
+  <img src="screenshots/download-progress.png" width="22%" alt="A video downloading with pause">
 </p>
 <p align="center">
+  <img src="screenshots/menu.png" width="22%" alt="Menu with reader mode, translate and print">
+  <img src="screenshots/reader.png" width="22%" alt="Reader mode">
   <img src="screenshots/privacy.png" width="22%" alt="Shields and privacy settings">
-  <img src="screenshots/settings.png" width="22%" alt="Settings list">
 </p>
 
 ## Features
