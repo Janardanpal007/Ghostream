@@ -3,14 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ghostream: Browse. Block. Download. Feel safe.</title>
+<title>Ghostream: Free Android Browser, Ad Blocker &amp; Downloader</title>
 <meta name="description" content="Ghostream is a free, open-source Android browser with a built-in ad and tracker blocker, fast 8-part downloads, YouTube without ads and reader mode.">
+<link rel="canonical" href="https://janardanpal007.github.io/Ghostream/">
 <meta property="og:title" content="Ghostream: Browse. Block. Download. Feel safe.">
 <meta property="og:description" content="Free, open-source Android browser with ad and tracker blocking and fast downloads.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://janardanpal007.github.io/Ghostream/">
 <meta property="og:image" content="https://janardanpal007.github.io/Ghostream/video/poster.jpg">
+<meta property="og:image:width" content="1080">
+<meta property="og:image:height" content="1920">
+<meta property="og:image:alt" content="Ghostream Android browser">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#07080d">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Ghostream",
+  "operatingSystem": "Android 8.0+",
+  "applicationCategory": "BrowserApplication",
+  "description": "Free, open-source Android browser with a built-in ad and tracker blocker, fast 8-part downloads, YouTube without ads and reader mode.",
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "downloadUrl": "https://github.com/Janardanpal007/Ghostream/releases/latest",
+  "url": "https://janardanpal007.github.io/Ghostream/",
+  "image": "https://janardanpal007.github.io/Ghostream/video/poster.jpg",
+  "author": { "@type": "Person", "name": "Janardanpal007", "url": "https://github.com/Janardanpal007" }
+}
+</script>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,7 +55,7 @@
   html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); line-height: 1.6; overflow-x: hidden; }
   a { color: inherit; text-decoration: none; }
-  img { max-width: 100%; display: block; }
+  img { max-width: 100%; height: auto; display: block; }
   .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
   .label { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
   .label b { color: var(--crimson); font-weight: 500; }
@@ -275,7 +296,7 @@
               <p>Tabs, private tabs, bookmarks and a smart address bar. The shield and downloads sit right in the top bar.</p>
               <ul><li>Private tabs keep nothing in history</li><li>No account, nothing to sign up for</li></ul>
             </div>
-            <div class="shot" style="--r:2deg"><img src="screenshots/browse.png" alt="Browsing nasa.gov in Ghostream" loading="lazy"></div>
+            <div class="shot" style="--r:2deg"><img src="screenshots/web/browse.webp" width="540" height="1200" alt="Browsing nasa.gov in Ghostream" loading="lazy"></div>
           </article>
 
           <article class="step" data-step="2">
@@ -285,7 +306,7 @@
               <p>Open filter lists stop ads and trackers before the page loads. YouTube plays without ad breaks, full screen in portrait or landscape.</p>
               <ul><li>uBlock Origin, EasyList and EasyPrivacy lists</li><li>Per-site shield in the address bar</li><li>YouTube with no ads</li></ul>
             </div>
-            <div class="shot" style="--r:-2deg"><img src="screenshots/youtube-portrait.png" alt="YouTube playing in Ghostream with no ads" loading="lazy"></div>
+            <div class="shot" style="--r:-2deg"><img src="screenshots/web/youtube-portrait.webp" width="540" height="1200" alt="YouTube playing in Ghostream with no ads" loading="lazy"></div>
           </article>
 
           <article class="step" data-step="3">
@@ -295,7 +316,7 @@
               <p>Each file is split into up to 8 parts and downloaded together. Here a 310 MB video downloads at 27 MB/s. Pause and resume any time.</p>
               <ul><li>Up to 8 parts at once</li><li>Pause and resume without starting over</li><li>Files sorted into folders by type</li></ul>
             </div>
-            <div class="shot" style="--r:2deg"><img src="screenshots/download-progress.png" alt="A 310 MB video downloading at 27 MB/s in Ghostream" loading="lazy"></div>
+            <div class="shot" style="--r:2deg"><img src="screenshots/web/download-progress.webp" width="540" height="1005" alt="A 310 MB video downloading at 27 MB/s in Ghostream" loading="lazy"></div>
           </article>
 
           <article class="step" data-step="4">
@@ -305,7 +326,7 @@
               <p>Reader mode shows just the article. HTTPS upgrade, cookie controls and tracking-tag removal keep you private.</p>
               <ul><li>Reader mode with text size controls</li><li>HTTPS upgrade and cookie controls</li><li>Strips tags like utm_source and fbclid</li></ul>
             </div>
-            <div class="shot" style="--r:-2deg"><img src="screenshots/privacy.png" alt="Shields and privacy settings in Ghostream" loading="lazy"></div>
+            <div class="shot" style="--r:-2deg"><img src="screenshots/web/privacy.webp" width="540" height="1200" alt="Shields and privacy settings in Ghostream" loading="lazy"></div>
           </article>
         </div>
       </div>
@@ -338,15 +359,15 @@
         <h2 class="split">Real screens, <em>not mockups.</em></h2>
       </div>
       <div class="strip reveal">
-        <figure><img src="screenshots/browse.png" alt="Browsing nasa.gov" loading="lazy"><figcaption>Browsing<span>Shield in the bar</span></figcaption></figure>
-        <figure><img src="screenshots/youtube-portrait.png" alt="YouTube with no ads" loading="lazy"><figcaption>YouTube<span>No ads</span></figcaption></figure>
-        <figure><img src="screenshots/download.png" alt="Add a link panel with 8 parts" loading="lazy"><figcaption>Add a link<span>8 parts at once</span></figcaption></figure>
-        <figure><img src="screenshots/download-progress.png" alt="A video downloading" loading="lazy"><figcaption>Downloading<span>27 MB/s</span></figcaption></figure>
-        <figure><img src="screenshots/menu.png" alt="Menu with reader mode" loading="lazy"><figcaption>Menu<span>Reader, translate, PDF</span></figcaption></figure>
-        <figure><img src="screenshots/reader.png" alt="Reader mode" loading="lazy"><figcaption>Reader mode<span>Clean text</span></figcaption></figure>
-        <figure><img src="screenshots/privacy.png" alt="Privacy settings" loading="lazy"><figcaption>Privacy<span>You are in control</span></figcaption></figure>
+        <figure><img src="screenshots/web/browse.webp" width="540" height="1200" alt="Browsing nasa.gov" loading="lazy"><figcaption>Browsing<span>Shield in the bar</span></figcaption></figure>
+        <figure><img src="screenshots/web/youtube-portrait.webp" width="540" height="1200" alt="YouTube with no ads" loading="lazy"><figcaption>YouTube<span>No ads</span></figcaption></figure>
+        <figure><img src="screenshots/web/download.webp" width="540" height="780" alt="Add a link panel with 8 parts" loading="lazy"><figcaption>Add a link<span>8 parts at once</span></figcaption></figure>
+        <figure><img src="screenshots/web/download-progress.webp" width="540" height="1005" alt="A video downloading" loading="lazy"><figcaption>Downloading<span>27 MB/s</span></figcaption></figure>
+        <figure><img src="screenshots/web/menu.webp" width="540" height="1200" alt="Menu with reader mode" loading="lazy"><figcaption>Menu<span>Reader, translate, PDF</span></figcaption></figure>
+        <figure><img src="screenshots/web/reader.webp" width="540" height="1200" alt="Reader mode" loading="lazy"><figcaption>Reader mode<span>Clean text</span></figcaption></figure>
+        <figure><img src="screenshots/web/privacy.webp" width="540" height="1200" alt="Privacy settings" loading="lazy"><figcaption>Privacy<span>You are in control</span></figcaption></figure>
       </div>
-      <div class="shot wide reveal" style="margin:40px auto 0"><img src="screenshots/youtube-landscape.png" alt="YouTube full screen in landscape in Ghostream" loading="lazy"></div>
+      <div class="shot wide reveal" style="margin:40px auto 0"><img src="screenshots/web/youtube-landscape.webp" width="960" height="432" alt="YouTube full screen in landscape in Ghostream" loading="lazy"></div>
     </div>
   </section>
 
