@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ghostream: Free Android Browser, Ad Blocker &amp; Downloader</title>
 <meta name="description" content="Ghostream is a free, open-source Android browser with a built-in ad and tracker blocker, fast 8-part downloads, YouTube without ads and reader mode.">
 <link rel="canonical" href="https://janardanpal007.github.io/Ghostream/">
@@ -15,7 +15,7 @@
 <meta property="og:image:height" content="1920">
 <meta property="og:image:alt" content="Ghostream Android browser">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#07080d">
+<meta name="theme-color" content="#090d11">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -24,6 +24,7 @@
   "operatingSystem": "Android 8.0+",
   "applicationCategory": "BrowserApplication",
   "description": "Free, open-source Android browser with a built-in ad and tracker blocker, fast 8-part downloads, YouTube without ads and reader mode.",
+  "softwareVersion": "1.3.8",
   "license": "https://www.gnu.org/licenses/gpl-3.0.html",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "downloadUrl": "https://github.com/Janardanpal007/Ghostream/releases/latest",
@@ -32,476 +33,98 @@
   "author": { "@type": "Person", "name": "Janardanpal007", "url": "https://github.com/Janardanpal007" }
 }
 </script>
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #07080d;
-    --night: #0c1222;
-    --dusk: #1a1830;
-    --ink: #eeecf2;
-    --muted: #8d91a6;
-    --line: rgba(255,255,255,.10);
-    --glass: rgba(14,18,34,.42);
-    --crimson: #ff3b4f;
-    --rose: #f5a6b8;
-    --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
-    --sans: "Inter", system-ui, "Segoe UI", sans-serif;
-    --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
-  }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); line-height: 1.6; overflow-x: hidden; }
-  a { color: inherit; text-decoration: none; }
-  img { max-width: 100%; height: auto; display: block; }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
-  .label { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
-  .label b { color: var(--crimson); font-weight: 500; }
-  em { font-style: italic; color: var(--rose); }
-  .serif { font-family: var(--serif); font-weight: 400; letter-spacing: -.01em; }
-
-  .pill { display: inline-flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 22px; border-radius: 999px; font-size: 14px; font-weight: 600; border: 1px solid var(--line); background: rgba(255,255,255,.04); backdrop-filter: blur(8px); transition: transform .25s, background .25s, box-shadow .25s; }
-  .pill:hover { transform: translateY(-2px); background: rgba(255,255,255,.09); }
-  .pill.red { background: var(--crimson); border-color: transparent; color: #fff; box-shadow: 0 10px 34px rgba(255,59,79,.35); }
-  .pill.red:hover { box-shadow: 0 14px 44px rgba(255,59,79,.5); background: #ff4d5f; }
-
-  /* ===== nav ===== */
-  header { position: fixed; inset: 0 0 auto; z-index: 20; transition: background .3s, border-color .3s; border-bottom: 1px solid transparent; }
-  header.solid { background: rgba(7,8,13,.72); backdrop-filter: blur(14px); border-color: var(--line); }
-  .bar { display: flex; align-items: center; justify-content: space-between; height: 68px; }
-  .logo { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-size: 24px; }
-  .logo svg { width: 30px; height: 30px; }
-  nav { display: flex; gap: 30px; font-size: 13px; color: var(--muted); }
-  nav a:hover { color: var(--ink); }
-  .bar .pill { min-height: 38px; padding: 0 16px; font-size: 13px; }
-
-  /* ===== hero: blue-hour coast + glowing planet rim ===== */
-  .hero { position: relative; min-height: 100svh; display: grid; place-items: center; overflow: hidden; padding: 110px 16px 160px; isolation: isolate;
-    background: radial-gradient(120% 70% at 50% 0%, #1c2440 0%, #111830 35%, #0a0e1c 65%, var(--bg) 100%); }
-  .stars { position: absolute; inset: 0; z-index: -3; background-image:
-      radial-gradient(1px 1px at 12% 18%, #fff8, transparent), radial-gradient(1px 1px at 28% 8%, #fff6, transparent),
-      radial-gradient(1.4px 1.4px at 44% 22%, #fff9, transparent), radial-gradient(1px 1px at 63% 12%, #fff7, transparent),
-      radial-gradient(1.2px 1.2px at 78% 26%, #fff8, transparent), radial-gradient(1px 1px at 88% 9%, #fff6, transparent),
-      radial-gradient(1px 1px at 6% 40%, #fff5, transparent), radial-gradient(1.3px 1.3px at 94% 44%, #fff7, transparent),
-      radial-gradient(1px 1px at 54% 6%, #fff5, transparent), radial-gradient(1px 1px at 36% 34%, #fff4, transparent);
-    animation: twinkle 6s ease-in-out infinite alternate; }
-  @keyframes twinkle { from { opacity: .6; } to { opacity: 1; } }
-  .rocks { position: absolute; inset: auto 0 0; height: 62%; z-index: -1; pointer-events: none; transform: translateY(var(--py, 0px)); }
-  .rocks svg { width: 100%; height: 100%; }
-  .planet { position: absolute; left: 50%; bottom: -124vmax; width: 150vmax; height: 150vmax; transform: translateX(-50%); border-radius: 50%; z-index: -2;
-    background: radial-gradient(closest-side, #05060a 97%, transparent 100%);
-    box-shadow: 0 -2px 0 rgba(255,120,140,.9), 0 -10px 40px rgba(255,59,79,.75), 0 -40px 120px rgba(255,59,79,.45), 0 -120px 260px rgba(180,40,90,.35); }
-  .planet::before { /* light that slides along the rim, following the pointer */
-    content: ""; position: absolute; inset: -3px; border-radius: 50%;
-    background: conic-gradient(from calc(var(--ang, 0deg) - 22deg), transparent 0deg, rgba(255,220,228,.95) 22deg, transparent 44deg);
-    -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 5px), #000 calc(100% - 3px), transparent 100%);
-            mask: radial-gradient(closest-side, transparent calc(100% - 5px), #000 calc(100% - 3px), transparent 100%);
-    filter: blur(1.5px); transition: background .2s; }
-  .glow-haze { position: absolute; inset: auto 0 0; height: 40%; z-index: -2; background: radial-gradient(60% 70% at 50% 100%, rgba(255,59,79,.22), transparent 70%); }
-
-  .card { position: relative; max-width: 760px; text-align: center; padding: 46px 40px 40px; border-radius: 28px; background: var(--glass); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(16px) saturate(140%); box-shadow: 0 40px 120px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08); }
-  .card h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(46px, 8vw, 96px); line-height: .98; margin: 18px 0 20px; letter-spacing: -.02em; }
-  .card p { color: #b9bccb; max-width: 520px; margin: 0 auto 30px; font-size: 16px; }
-  .card .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
-  .hero-foot { position: absolute; left: 0; right: 0; bottom: 26px; display: flex; justify-content: space-between; padding: 0 32px; }
-
-  /* split-word reveal */
-  .split .w { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: .08em; }
-  .split .w > span { display: inline-block; transform: translateY(105%); transition: transform .9s cubic-bezier(.2,.7,.1,1); transition-delay: calc(var(--i) * 60ms); }
-  .split.in .w > span { transform: none; }
-
-  /* ===== proof strip ===== */
-  .proof { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 30px 0; text-align: center; }
-  .proof .row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px 34px; margin-top: 16px; font-family: var(--serif); font-size: clamp(20px, 2.4vw, 28px); color: #c9cad6; }
-  .proof .row i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); display: inline-block; }
-
-  section { padding: 120px 0; position: relative; }
-  h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(40px, 6vw, 72px); line-height: 1; margin: 14px 0 18px; letter-spacing: -.02em; }
-  .sub { color: var(--muted); max-width: 560px; font-size: 16px; margin: 0; }
-
-  /* ===== the cairn: four stones, one per step ===== */
-  .stack { display: grid; gap: 40px; margin-top: 60px; }
-  .cairn-col { position: sticky; top: 90px; align-self: start; height: min(76vh, 620px); display: grid; place-items: center; }
-  .cairn-col svg { width: min(100%, 380px); height: auto; overflow: visible; }
-  .stone { opacity: 0; transform: translateY(-60px); transition: opacity .6s, transform .9s cubic-bezier(.3,1.4,.5,1); transform-box: fill-box; transform-origin: center; }
-  .stone.on { opacity: 1; transform: none; }
-  .stone.lit path { fill: url(#stoneLit); }
-  .cairn-ground { stroke: rgba(255,255,255,.18); }
-  .cairn-col .count { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; }
-  .steps { display: grid; gap: 22vh; padding: 6vh 0 14vh; }
-  .step { display: grid; gap: 24px; align-items: center; }
-  .step .num { font-family: var(--mono); color: var(--crimson); font-size: 13px; letter-spacing: .16em; }
-  .step h3 { font-family: var(--serif); font-weight: 400; font-size: clamp(36px, 4.6vw, 56px); line-height: 1; margin: 8px 0 12px; }
-  .step p { color: var(--muted); margin: 0 0 14px; }
-  .step ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: 14px; color: #c3c5d2; }
-  .step li::before { content: "—"; color: var(--crimson); margin-right: 10px; }
-  .shot { width: min(260px, 70vw); border-radius: 30px; padding: 7px; background: #0e1120; border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 60px rgba(255,59,79,.08); transform: rotate(var(--r, 0deg)); }
-  .shot img { border-radius: 24px; }
-  .shot.wide { width: min(460px, 86vw); }
-
-  /* ===== services-style feature cards with crimson spotlight ===== */
-  .grid { display: grid; gap: 16px; margin-top: 50px; }
-  .f { position: relative; overflow: hidden; padding: 30px 28px 32px; border-radius: 22px; background: #0c0f1b; border: 1px solid var(--line); transition: border-color .3s, transform .3s; }
-  .f::before { content: ""; position: absolute; inset: 0; background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%), rgba(255,59,79,.18), transparent 60%); opacity: 0; transition: opacity .3s; }
-  .f:hover { border-color: rgba(255,59,79,.45); transform: translateY(-4px); }
-  .f:hover::before { opacity: 1; }
-  .f > * { position: relative; }
-  .f .label { display: block; margin-bottom: 26px; }
-  .f h3 { font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.05; margin: 0 0 10px; }
-  .f p { color: var(--muted); margin: 0; font-size: 14px; }
-
-
-  /* ===== screens ===== */
-  .strip { display: flex; gap: 18px; overflow-x: auto; padding: 50px 4px 24px; scroll-snap-type: x mandatory; scrollbar-width: thin; }
-  .strip figure { flex: none; width: 220px; margin: 0; scroll-snap-align: center; }
-  .strip img { border-radius: 24px; border: 6px solid #0e1120; outline: 1px solid var(--line); transition: transform .35s; }
-  .strip figure:hover img { transform: translateY(-6px); }
-  .strip figcaption { margin-top: 12px; font-family: var(--serif); font-size: 20px; }
-  .strip figcaption span { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-
-  /* ===== download ===== */
-  .get { position: relative; overflow: hidden; border-radius: 30px; padding: 56px 28px; border: 1px solid var(--line); background: radial-gradient(90% 120% at 50% 120%, rgba(255,59,79,.28), transparent 60%), #0b0e1a; text-align: center; }
-  .get h2 { margin-top: 10px; }
-  .get .sub { margin: 0 auto; }
-  .get .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 30px; }
-  .facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; max-width: 640px; margin: 40px auto 0; }
-  .fact { padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,.03); text-align: left; }
-  .fact small { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-  .fact b { font-family: var(--serif); font-weight: 400; font-size: 28px; }
-  .install { display: grid; gap: 18px; margin-top: 50px; counter-reset: s; list-style: none; padding: 0; }
-  .install li { counter-increment: s; border-top: 1px solid var(--line); padding-top: 18px; }
-  .install li::before { content: "0" counter(s) " /"; font-family: var(--mono); font-size: 12px; color: var(--crimson); letter-spacing: .14em; }
-  .install b { display: block; font-family: var(--serif); font-weight: 400; font-size: 26px; margin: 6px 0 4px; }
-  .install span { color: var(--muted); font-size: 14px; }
-  .alt { color: var(--muted); font-size: 14px; margin-top: 18px; }
-  .alt a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--crimson); text-underline-offset: 4px; }
-
-  footer { border-top: 1px solid var(--line); padding: 40px 0 56px; color: var(--muted); font-size: 13px; }
-  .foot { display: flex; flex-wrap: wrap; gap: 18px; justify-content: space-between; }
-  .foot .links { display: flex; flex-wrap: wrap; gap: 22px; }
-  footer a:hover { color: var(--ink); }
-
-  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .9s ease, transform .9s ease; }
-  .reveal.in { opacity: 1; transform: none; }
-
-  @media (min-width: 900px) {
-    .stack { grid-template-columns: .8fr 1.2fr; }
-    .step { grid-template-columns: 1fr auto; }
-    .grid { grid-template-columns: repeat(3, 1fr); }
-    .install { grid-template-columns: repeat(3, 1fr); }
-    .facts { grid-template-columns: repeat(4, 1fr); }
-  }
-  @media (max-width: 899px) {
-    nav { display: none; }
-    .cairn-col { position: sticky; top: 68px; z-index: 5; height: 190px; padding-bottom: 26px; background: linear-gradient(var(--bg) 80%, transparent); }
-    .cairn-col svg { width: 120px; }
-    .cairn-col .count { bottom: 4px; }
-    .planet { width: 260vw; height: 260vw; bottom: -226vw; }
-    .rocks { height: 38%; }
-    .card { padding: 34px 20px 28px; }
-    .hero-foot { padding: 0 18px; }
-    .steps { gap: 80px; }
-    .step .shot { justify-self: center; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; transition: none !important; }
-    .reveal, .split .w > span { opacity: 1; transform: none; }
-    .stone { opacity: 1; transform: none; }
-  }
-</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "Is Ghostream really free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Ghostream is free, open-source software under the GNU GPL v3 license. There is no subscription or account required to use the app." } },
+    { "@type": "Question", "name": "Which APK should I download?", "acceptedAnswer": { "@type": "Answer", "text": "Choose ARM64 for most modern 64-bit Android phones. Choose Universal if you don't know your device's architecture; it includes all supported architectures in a larger file. Your device must run Android 8.0 or above." } },
+    { "@type": "Question", "name": "What can I download?", "acceptedAnswer": { "@type": "Answer", "text": "Ghostream supports file downloads, videos from supported websites, magnet links, and .torrent files. Website support can change. Download only content you have permission to save." } },
+    { "@type": "Question", "name": "What do the privacy tools do?", "acceptedAnswer": { "@type": "Answer", "text": "Ghostream offers ad and tracker filter lists, per-site shields, HTTPS upgrades, cookie controls, private tabs, and tracking-tag removal. These tools give you more control; they don't make your browsing anonymous." } },
+    { "@type": "Question", "name": "Is the 3D phone running the actual app?", "acceptedAnswer": { "@type": "Answer", "text": "The explorer shows real screenshots from the Ghostream repository in an interactive 3D frame. Switch features to see each screen, drag horizontally or use the angle slider to rotate, and tap the phone to enlarge the screenshot. To use Ghostream, install the Android APK." } },
+    { "@type": "Question", "name": "Where can I report a problem or inspect the code?", "acceptedAnswer": { "@type": "Answer", "text": "Visit the <a href=\"https://github.com/Janardanpal007/Ghostream\">official GitHub repository</a> to read the source, or <a href=\"https://github.com/Janardanpal007/Ghostream/issues\">open an issue</a> with details about your device and the problem." } }
+  ]
+}
+</script>
+<link rel="icon" href="assets/ghost.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
 </head>
 <body>
-
-<header id="hdr">
-  <div class="wrap bar">
-    <a class="logo" href="#top" aria-label="Ghostream home">
-      <svg viewBox="0 0 108 108" aria-hidden="true"><rect width="108" height="108" rx="26" fill="#07070A"/><path fill="#7CFFB2" d="M54 27C40 27 31 37 31 52v23l5.5-5 5.5 5 6.5-5 6.5 5 5.5-5 5.5 5 5.5-5 4.5 4V52C77 37 68 27 54 27z"/><circle cx="46" cy="50" r="4.2" fill="#07070A"/><circle cx="62" cy="50" r="4.2" fill="#07070A"/><rect x="24" y="43" width="6" height="5" rx="2.5" fill="#3EC9FF"/><rect x="22" y="54" width="8" height="5" rx="2.5" fill="#3EC9FF"/><rect x="24" y="65" width="6" height="5" rx="2.5" fill="#3EC9FF"/></svg>
-      Ghostream
-    </a>
-    <nav>
-      <a href="#how">How it works</a>
-      <a href="#features">Features</a>
-      <a href="#screens">Screens</a>
-    </nav>
-    <a class="pill red" href="#get">Download</a>
+<a class="skip" href="#main">Skip to content</a>
+<header class="header">
+  <div class="wrap nav-bar">
+    <a class="brand" href="#top" aria-label="Ghostream home"><img src="assets/ghost.svg" width="38" height="38" alt="">Ghostream</a>
+    <nav class="desktop-nav" aria-label="Main navigation"><a href="#explore">Explore the app</a><a href="#features">Features</a><a href="#install">How to install</a></nav>
+    <div class="nav-actions"><a class="nav-source" href="https://github.com/Janardanpal007/Ghostream" target="_blank" rel="noopener" aria-label="View Ghostream source on GitHub (opens new tab)"><svg><use href="#i-code"/></svg></a><a class="button small" href="#download">Get Ghostream <svg><use href="#i-arrow-down"/></svg></a><button class="menu-toggle icon-button" aria-label="Open navigation" aria-expanded="false" aria-controls="mobile-nav"><svg><use href="#i-menu"/></svg></button></div>
   </div>
+  <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation" hidden><a href="#explore">Explore the app</a><a href="#features">Features</a><a href="#install">How to install</a><a href="#faq">Questions &amp; answers</a></nav>
 </header>
-
-<div class="hero" id="top">
-  <div class="stars"></div>
-  <div class="planet" id="planet"></div>
-  <div class="glow-haze"></div>
-  <div class="rocks" id="rocks" aria-hidden="true">
-    <svg viewBox="0 0 1440 560" preserveAspectRatio="none">
-      <defs><linearGradient id="rk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a2036"/><stop offset="1" stop-color="#06070c"/></linearGradient></defs>
-      <path fill="url(#rk)" d="M0 560V180l60-40 40 30 50-90 70 70 30-30 60 110 40-20 70 140 60-30 50 240z"/>
-      <path fill="url(#rk)" d="M1440 560V140l-50 20-40-60-60 90-40-30-70 120-40-20-60 130-50-10-70 180z"/>
-    </svg>
-  </div>
-
-  <div class="card reveal" id="heroCard">
-    <div class="label"><b>01</b> &nbsp;/&nbsp; Android browser &nbsp;·&nbsp; v<span id="hero-ver">1.3.8</span></div>
-    <h1 class="split">Browse. Block. Download. <em>Feel safe.</em></h1>
-    <p>Ghostream blocks ads and trackers before they load, plays YouTube without ads, and saves files in 8 parts at once. Free, and no account needed.</p>
-    <div class="cta">
-      <a class="pill red" href="#get">Download APK &nbsp;→</a>
-      <a class="pill" href="#how">See how it works</a>
+<main id="main">
+  <section class="hero wrap" id="top">
+    <div class="hero-copy">
+      <div class="eyebrow"><span class="status-dot"></span> YOUR INTERNET. YOUR RULES.</div>
+      <h1>Browse.<br>Block. Download.<br><em>Feel safe.</em></h1>
+      <p class="hero-description">A little less noise.<br>A lot more internet.</p>
+      <p class="hero-detail">Meet Ghostream. A free, open-source Android browser with built-in ad blocking and powerful downloads. Everything you need, in one place.</p>
+      <div class="hero-actions"><a class="button" href="#download"><svg><use href="#i-android"/></svg>Download for Android <svg><use href="#i-arrow-down"/></svg></a><a class="text-link" href="#explore">Take a closer look <span>↗</span></a></div>
+      <div class="hero-meta"><span>v1.3.8</span><span>Android 8.0+</span><span>Free. No account.</span></div>
     </div>
-  </div>
-
-  <div class="hero-foot"><span class="label">Android 8 – 17 &nbsp;·&nbsp; GPL-3.0</span><span class="label">Scroll</span></div>
-</div>
-
-<div class="proof">
-  <div class="wrap">
-    <div class="label">Built on open filter lists</div>
-    <div class="row"><span>uBlock Origin</span><i></i><span>EasyList</span><i></i><span>EasyPrivacy</span><i></i><span>HTTPS upgrade</span><i></i><span>Reader mode</span></div>
-  </div>
-</div>
-
-<main>
-
-  <!-- How it works: the cairn -->
-  <section id="how">
-    <div class="wrap">
-      <div class="reveal">
-        <div class="label"><b>02</b> &nbsp;/&nbsp; How it works</div>
-        <h2 class="split">Four stones, <em>placed in order.</em></h2>
-        <p class="sub">Every step makes the browser safer. Scroll and the cairn grows, one stone per step.</p>
-      </div>
-
-      <div class="stack">
-        <div class="cairn-col" aria-hidden="true">
-          <svg viewBox="0 0 300 420">
-            <defs>
-              <linearGradient id="stoneBase" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3f57"/><stop offset="1" stop-color="#151827"/></linearGradient>
-              <linearGradient id="stoneLit" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8a98"/><stop offset=".45" stop-color="#7a2a46"/><stop offset="1" stop-color="#1b1526"/></linearGradient>
-            </defs>
-            <line class="cairn-ground" x1="20" y1="402" x2="280" y2="402" stroke-width="1.5"/>
-            <g class="stone" data-stone="1"><path fill="url(#stoneBase)" d="M48 400c-10-4-12-32 6-44 30-18 162-20 196-2 18 10 16 40 4 46-36 6-170 6-206 0z"/></g>
-            <g class="stone" data-stone="2"><path fill="url(#stoneBase)" d="M78 352c-12-6-8-36 12-44 28-12 112-12 132 2 16 12 12 38 0 42-34 8-110 8-144 0z"/></g>
-            <g class="stone" data-stone="3"><path fill="url(#stoneBase)" d="M100 306c-10-6-6-32 12-40 22-10 72-10 88 2 14 10 10 34-2 38-28 6-70 6-98 0z"/></g>
-            <g class="stone" data-stone="4"><path fill="url(#stoneBase)" d="M120 264c-8-6-4-30 12-38 16-8 40-6 52 4 10 10 6 30-4 34-20 6-42 6-60 0z"/></g>
-          </svg>
-          <div class="count label"><b id="stoneNum">0</b> / 4 stones</div>
+    <div class="explorer" id="explore">
+      <div class="explorer-top"><span class="eyebrow">THE APP, UP CLOSE</span><span class="micro"><span class="tiny-dot"></span> REAL SCREENS</span></div>
+      <div class="device-scene" id="device-scene">
+        <div class="orbit orbit-one" aria-hidden="true"></div><div class="orbit orbit-two" aria-hidden="true"></div><div class="floor-glow" aria-hidden="true"></div>
+        <div class="scene-cross cross-one" aria-hidden="true">+</div><div class="scene-cross cross-two" aria-hidden="true">+</div>
+        <button class="floating-tag shield-tag" data-feature="shield" aria-label="Explore ad and tracker blocking"><span class="tag-icon"><svg><use href="#i-shield"/></svg></span><span>Less tracking.<small>More peace of mind.</small></span><span class="tag-arrow">↗</span></button>
+        <div class="phone" id="phone">
+          <div class="phone-edge" aria-hidden="true"></div><div class="phone-button" aria-hidden="true"></div>
+          <button class="phone-screen" id="screen-button" aria-label="Enlarge the browsing screenshot"><img id="app-screen" src="screenshots/web/browse.webp" width="540" height="1200" alt="Ghostream browsing NASA with the shield in the address bar" fetchpriority="high" draggable="false"><span class="screen-zoom"><svg><use href="#i-expand"/></svg> View screen</span></button>
         </div>
-
-        <div class="steps">
-          <article class="step" data-step="1">
-            <div>
-              <div class="num">01 / BROWSE</div>
-              <h3>A browser that is <em>on your side.</em></h3>
-              <p>Tabs, private tabs, bookmarks and a smart address bar. The shield and downloads sit right in the top bar.</p>
-              <ul><li>Private tabs keep nothing in history</li><li>No account, nothing to sign up for</li></ul>
-            </div>
-            <div class="shot" style="--r:2deg"><img src="screenshots/web/browse.webp" width="540" height="1200" alt="Browsing nasa.gov in Ghostream" loading="lazy"></div>
-          </article>
-
-          <article class="step" data-step="2">
-            <div>
-              <div class="num">02 / BLOCK</div>
-              <h3>Ads and trackers, <em>gone.</em></h3>
-              <p>Open filter lists stop ads and trackers before the page loads. YouTube plays without ad breaks, full screen in portrait or landscape.</p>
-              <ul><li>uBlock Origin, EasyList and EasyPrivacy lists</li><li>Per-site shield in the address bar</li><li>YouTube with no ads</li></ul>
-            </div>
-            <div class="shot" style="--r:-2deg"><img src="screenshots/web/youtube-portrait.webp" width="540" height="1200" alt="YouTube playing in Ghostream with no ads" loading="lazy"></div>
-          </article>
-
-          <article class="step" data-step="3">
-            <div>
-              <div class="num">03 / DOWNLOAD</div>
-              <h3>Eight parts, <em>one fast file.</em></h3>
-              <p>Each file is split into up to 8 parts and downloaded together. Here a 310 MB video downloads at 27 MB/s. Pause and resume any time.</p>
-              <ul><li>Up to 8 parts at once</li><li>Pause and resume without starting over</li><li>Files sorted into folders by type</li></ul>
-            </div>
-            <div class="shot" style="--r:2deg"><img src="screenshots/web/download-progress.webp" width="540" height="1005" alt="A 310 MB video downloading at 27 MB/s in Ghostream" loading="lazy"></div>
-          </article>
-
-          <article class="step" data-step="4">
-            <div>
-              <div class="num">04 / FEEL SAFE</div>
-              <h3>Read in peace, <em>stay private.</em></h3>
-              <p>Reader mode shows just the article. HTTPS upgrade, cookie controls and tracking-tag removal keep you private.</p>
-              <ul><li>Reader mode with text size controls</li><li>HTTPS upgrade and cookie controls</li><li>Strips tags like utm_source and fbclid</li></ul>
-            </div>
-            <div class="shot" style="--r:-2deg"><img src="screenshots/web/privacy.webp" width="540" height="1200" alt="Shields and privacy settings in Ghostream" loading="lazy"></div>
-          </article>
-        </div>
+        <button class="floating-tag download-tag" data-feature="download" aria-label="Explore 8-part downloads"><span class="tag-icon"><svg><use href="#i-arrow-down"/></svg></span><span>8 parts. One file.<small>Pause. Resume. Keep going.</small></span><span class="tag-arrow">↗</span></button>
+        <span class="scene-coordinate" aria-hidden="true">G / 01 — ANDROID</span>
       </div>
+      <div class="feature-tabs" role="tablist" aria-label="Explore Ghostream screens">
+        <button id="tab-browse" class="feature-tab" role="tab" aria-selected="true" aria-controls="screen-panel" tabindex="0" data-feature="browse"><svg><use href="#i-globe"/></svg>Browse</button>
+        <button id="tab-shield" class="feature-tab" role="tab" aria-selected="false" aria-controls="screen-panel" tabindex="-1" data-feature="shield"><svg><use href="#i-shield"/></svg>Block</button>
+        <button id="tab-download" class="feature-tab" role="tab" aria-selected="false" aria-controls="screen-panel" tabindex="-1" data-feature="download"><svg><use href="#i-arrow-down"/></svg>Download</button>
+        <button id="tab-reader" class="feature-tab" role="tab" aria-selected="false" aria-controls="screen-panel" tabindex="-1" data-feature="reader"><svg><use href="#i-book"/></svg>Read</button>
+      </div>
+      <div id="screen-panel" class="screen-caption" role="tabpanel" aria-labelledby="tab-browse" tabindex="0"><span id="screen-number" class="micro">01 / BROWSE</span><p id="screen-description">Tabs, bookmarks and your shield. Right where you need them.</p></div>
+      <div class="angle-control"><svg><use href="#i-rotate"/></svg><label for="view-angle">View angle</label><input type="range" id="view-angle" min="-30" max="30" value="-15"><button class="reset-angle" type="button">Reset</button><button class="motion-toggle" type="button" aria-pressed="false">Pause motion</button></div>
     </div>
   </section>
-
-  <!-- Features -->
-  <section id="features">
-    <div class="wrap">
-      <div class="reveal">
-        <div class="label"><b>03</b> &nbsp;/&nbsp; Features</div>
-        <h2 class="split">Everything a browser <em>should be.</em></h2>
-      </div>
-      <div class="grid">
-        <div class="f reveal"><span class="label">01</span><h3>Ad &amp; tracker blocking</h3><p>Open filter lists stop them before the page loads.</p></div>
-        <div class="f reveal"><span class="label">02</span><h3>YouTube with no ads</h3><p>Shorts and videos, full screen in portrait or landscape.</p></div>
-        <div class="f reveal"><span class="label">03</span><h3>8-part downloads</h3><p>Faster files, with pause and resume.</p></div>
-        <div class="f reveal"><span class="label">04</span><h3>Reader mode</h3><p>Just the article, in clean text.</p></div>
-        <div class="f reveal"><span class="label">05</span><h3>Video &amp; torrents</h3><p>Save videos in the quality you pick. Open magnet links.</p></div>
-        <div class="f reveal"><span class="label">06</span><h3>Free, no account</h3><p>Nothing to pay and nothing to sign up for.</p></div>
-      </div>
+  <div class="promise-strip"><div class="wrap promise-row"><span><svg><use href="#i-shield"/></svg> Built-in ad &amp; tracker blocking</span><span><svg><use href="#i-downloads"/></svg> Up to 8-part downloads</span><span><svg><use href="#i-code"/></svg> Open source. Open to you.</span><span><svg><use href="#i-user"/></svg> No account required</span></div></div>
+  <section class="features-section wrap" id="features">
+    <div class="section-heading"><div><div class="eyebrow">01 / A BETTER EVERYDAY BROWSER</div><h2>More freedom.<br><em>Less friction.</em></h2></div><p>From your first tab to your last download,<br class="desktop-break"> Ghostream keeps the useful things close.</p></div>
+    <div class="feature-grid">
+      <article class="feature-card shield-card"><div class="card-top"><span class="card-icon"><svg><use href="#i-shield"/></svg></span><span class="micro">01 — PROTECT</span></div><h3>The web. Without the clutter.</h3><p>Block ads and trackers with open filter lists. Adjust the shield for each site, upgrade connections to HTTPS, and choose how cookies behave.</p><div class="shield-visual" aria-hidden="true"><div class="track-label"><span></span>ads &amp; trackers</div><div class="filter-line"></div><div class="shield-orb"><svg><use href="#i-shield"/></svg></div><div class="clean-line"></div><div class="clean-label">your browser <span>✓</span></div></div><div class="card-foot">uBlock Origin · EasyList · EasyPrivacy</div></article>
+      <article class="feature-card download-card"><div class="card-top"><span class="card-icon"><svg><use href="#i-downloads"/></svg></span><span class="micro">02 — SAVE</span></div><h3>Downloads that keep up.</h3><p>Split files into up to 8 parts. Pause and resume when you need to. Save videos from supported sites or open magnet links and torrent files.</p><div class="parts-visual" aria-label="Illustration of eight download parts"><div class="parts-label"><span>One file. Multiple connections.</span><span>8 / 8</span></div><div class="parts-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="parts-note"><svg><use href="#i-folder"/></svg> Sorted into folders by file type <span>↳</span></div></div><div class="card-foot">Files · Supported videos · Torrents</div></article>
+      <article class="feature-card reading-card"><div class="card-top"><span class="card-icon"><svg><use href="#i-book"/></svg></span><span class="micro">03 — UNWIND</span></div><h3>A little room to focus.</h3><p>Reader mode brings the article into focus with clean text and adjustable type. Private tabs and tracking-tag removal give you more control as you browse.</p><div class="reading-visual" aria-hidden="true"><span class="micro">READER MODE</span><p>Just you.<br><em>And the words.</em></p><div class="reading-lines"><i></i><i></i><i></i></div><span class="type-sample">A<span>A</span></span></div><div class="card-foot">Clean reading · Text size controls · Private tabs</div></article>
     </div>
+    <div class="source-note"><svg><use href="#i-code"/></svg><p>Nothing behind a subscription. Nothing to sign up for.<br><span>Free software, licensed under GNU GPL v3. Built by Janardan Pal.</span></p><a class="text-link" href="https://github.com/Janardanpal007/Ghostream" target="_blank" rel="noopener">Explore the source <span>↗</span></a></div>
   </section>
-
-  <!-- Screens -->
-  <section id="screens">
-    <div class="wrap">
-      <div class="reveal">
-        <div class="label"><b>04</b> &nbsp;/&nbsp; Screens</div>
-        <h2 class="split">Real screens, <em>not mockups.</em></h2>
-      </div>
-      <div class="strip reveal">
-        <figure><img src="screenshots/web/browse.webp" width="540" height="1200" alt="Browsing nasa.gov" loading="lazy"><figcaption>Browsing<span>Shield in the bar</span></figcaption></figure>
-        <figure><img src="screenshots/web/youtube-portrait.webp" width="540" height="1200" alt="YouTube with no ads" loading="lazy"><figcaption>YouTube<span>No ads</span></figcaption></figure>
-        <figure><img src="screenshots/web/download.webp" width="540" height="780" alt="Add a link panel with 8 parts" loading="lazy"><figcaption>Add a link<span>8 parts at once</span></figcaption></figure>
-        <figure><img src="screenshots/web/download-progress.webp" width="540" height="1005" alt="A video downloading" loading="lazy"><figcaption>Downloading<span>27 MB/s</span></figcaption></figure>
-        <figure><img src="screenshots/web/menu.webp" width="540" height="1200" alt="Menu with reader mode" loading="lazy"><figcaption>Menu<span>Reader, translate, PDF</span></figcaption></figure>
-        <figure><img src="screenshots/web/reader.webp" width="540" height="1200" alt="Reader mode" loading="lazy"><figcaption>Reader mode<span>Clean text</span></figcaption></figure>
-        <figure><img src="screenshots/web/privacy.webp" width="540" height="1200" alt="Privacy settings" loading="lazy"><figcaption>Privacy<span>You are in control</span></figcaption></figure>
-      </div>
-      <div class="shot wide reveal" style="margin:40px auto 0"><img src="screenshots/web/youtube-landscape.webp" width="960" height="432" alt="YouTube full screen in landscape in Ghostream" loading="lazy"></div>
+  <section class="download-section" id="download"><div class="wrap download-layout">
+    <div class="download-copy"><div class="eyebrow">02 / MAKE IT YOURS</div><h2>Your next browser.<br><em>One download away.</em></h2><p>Get Ghostream directly from the official GitHub release. Choose the APK that fits your Android device.</p><div class="release-badge"><span class="status-dot"></span> v1.3.8 <span>·</span> Released 4 November 2026</div><a class="text-link release-link" href="https://github.com/Janardanpal007/Ghostream/releases/tag/v1.3.8" target="_blank" rel="noopener">Read release notes <span>↗</span></a><div class="compatibility"><svg><use href="#i-android"/></svg><div><strong>Made for Android 8.0 and above</strong><span>APK installation on Android phones and tablets.</span></div></div></div>
+    <div class="download-panel"><div class="panel-title"><h3>Choose your APK</h3><span class="micro">OFFICIAL RELEASE</span></div>
+      <fieldset class="apk-options"><legend class="sr-only">APK architecture</legend>
+        <label class="apk-option"><input type="radio" name="apk" value="arm64" checked><span class="radio-mark"></span><span class="apk-text"><strong>ARM64 <small>RECOMMENDED</small></strong><span>For most modern 64-bit Android devices</span></span><span class="file-size">73.1 MB</span></label>
+        <label class="apk-option"><input type="radio" name="apk" value="universal"><span class="radio-mark"></span><span class="apk-text"><strong>Universal</strong><span>Includes all supported architectures</span></span><span class="file-size">236.1 MB</span></label>
+      </fieldset>
+      <p class="apk-hint">Not sure which one your phone needs? Choose Universal. It works everywhere, in a larger file.</p>
+      <a id="apk-download" class="button download-button" href="https://github.com/Janardanpal007/Ghostream/releases/download/v1.3.8/Ghostream-1.3.8-android-arm64.apk"><svg><use href="#i-arrow-down"/></svg><span id="download-label">Download ARM64 APK</span><svg><use href="#i-arrow"/></svg></a>
+      <p class="download-source">Downloads from github.com · Free, with no account needed</p>
+      <details class="checksum-details"><summary>Verify your download <span>+</span></summary><p>Compare the downloaded file’s SHA-256 with the official release digest.</p><code id="checksum">db5c7382808a1898b613e70a4df1b16f08634f409f44be43b55dd39662817bd0</code><button class="copy-checksum" type="button">Copy SHA-256 <svg><use href="#i-copy"/></svg></button><span id="copy-status" role="status"></span></details>
     </div>
-  </section>
-
-  <!-- Download -->
-  <section id="get">
-    <div class="wrap">
-      <div class="get reveal">
-        <div class="label"><b>05</b> &nbsp;/&nbsp; Get Ghostream</div>
-        <h2 class="split">Start browsing <em>safely.</em></h2>
-        <p class="sub">It's free. Most phones need the arm64 file. Not sure? Grab the universal one.</p>
-        <div class="cta">
-          <a class="pill red" id="dl-arm64" href="https://github.com/Janardanpal007/Ghostream/releases/latest/download/Ghostream-1.3.8-android-arm64.apk">Download arm64 APK &nbsp;→</a>
-          <a class="pill" id="dl-universal" href="https://github.com/Janardanpal007/Ghostream/releases/latest/download/Ghostream-1.3.8-android-universal.apk">Universal APK</a>
-        </div>
-        <p class="alt">All versions on <a href="https://github.com/Janardanpal007/Ghostream/releases/latest">GitHub Releases</a>.</p>
-        <div class="facts">
-          <div class="fact"><small>Version</small><b id="ver">1.3.8</b></div>
-          <div class="fact"><small>Android</small><b>8 – 17</b></div>
-          <div class="fact"><small>arm64</small><b>73 MB</b></div>
-          <div class="fact"><small>Universal</small><b>236 MB</b></div>
-        </div>
-      </div>
-      <ol class="install">
-        <li class="reveal"><b>Download the APK</b><span>Tap the button above on your Android phone.</span></li>
-        <li class="reveal"><b>Allow installs</b><span>Android asks once. Allow installs from your browser, then tap Install.</span></li>
-        <li class="reveal"><b>Open Ghostream</b><span>Allow notifications for download progress, then start browsing.</span></li>
-      </ol>
-    </div>
-  </section>
-
+  </div></section>
+  <section class="install-section wrap" id="install"><div class="section-heading"><div><div class="eyebrow">03 / UP AND RUNNING</div><h2>Three steps.<br><em>A fresh start.</em></h2></div><p>Install the APK on your Android device.<br>No store account needed.</p></div><ol class="install-steps"><li><span class="step-number">01</span><h3>Download your APK</h3><p>Choose ARM64 for most modern phones, or Universal if you’re unsure. Open the downloaded file on your device.</p></li><li><span class="step-number">02</span><h3>Allow the installation</h3><p>If Android prompts you, allow “Install unknown apps” for the browser or file manager you used. Then tap Install.</p></li><li><span class="step-number">03</span><h3>Say hello to Ghostream</h3><p>Open the app and start browsing. You can turn the installation permission off again in Android settings.</p></li></ol></section>
+  <section class="faq-section wrap" id="faq"><div><div class="eyebrow">04 / GOOD TO KNOW</div><h2>A few things<br><em>you might ask.</em></h2></div><div class="faq-list"><details><summary>Is Ghostream really free?<span>+</span></summary><p>Yes. Ghostream is free, open-source software under the GNU GPL v3 license. There is no subscription or account required to use the app.</p></details><details><summary>Which APK should I download?<span>+</span></summary><p>Choose ARM64 for most modern 64-bit Android phones. Choose Universal if you don’t know your device’s architecture; it includes all supported architectures in a larger file. Your device must run Android 8.0 or above.</p></details><details><summary>What can I download?<span>+</span></summary><p>Ghostream supports file downloads, videos from supported websites, magnet links, and .torrent files. Website support can change. Download only content you have permission to save.</p></details><details><summary>What do the privacy tools do?<span>+</span></summary><p>Ghostream offers ad and tracker filter lists, per-site shields, HTTPS upgrades, cookie controls, private tabs, and tracking-tag removal. These tools give you more control; they don’t make your browsing anonymous.</p></details><details><summary>Is the 3D phone running the actual app?<span>+</span></summary><p>The explorer shows real screenshots from the Ghostream repository in an interactive 3D frame. Switch features to see each screen, drag horizontally or use the angle slider to rotate, and tap the phone to enlarge the screenshot. To use Ghostream, install the Android APK.</p></details><details><summary>Where can I report a problem or inspect the code?<span>+</span></summary><p>Visit the <a href="https://github.com/Janardanpal007/Ghostream" target="_blank" rel="noopener">official GitHub repository</a> to read the source, or <a href="https://github.com/Janardanpal007/Ghostream/issues" target="_blank" rel="noopener">open an issue</a> with details about your device and the problem.</p></details></div></section>
+  <section class="closing wrap"><img src="assets/ghost.svg" width="72" height="72" alt="Ghostream ghost logo"><p>A quieter corner of the internet.</p><a class="text-link" href="#download">Make yourself at home <span>↗</span></a></section>
 </main>
-
-<footer>
-  <div class="wrap foot">
-    <div class="links">
-      <a href="https://github.com/Janardanpal007/Ghostream/releases">Changelog</a>
-      <a href="https://github.com/Janardanpal007">Developer</a>
-    </div>
-    <div>Free software under the GNU GPL v3. Built by Janardan Pal.</div>
-  </div>
-</footer>
-
-<script>
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  // Split headings into words for the rise-in reveal.
-  document.querySelectorAll(".split").forEach((el) => {
-    let i = 0;
-    const wrapWords = (node) => {
-      [...node.childNodes].forEach((child) => {
-        if (child.nodeType === Node.TEXT_NODE) {
-          const frag = document.createDocumentFragment();
-          child.textContent.split(/(\s+)/).forEach((part) => {
-            if (!part) return;
-            if (/^\s+$/.test(part)) { frag.append(part); return; }
-            const w = document.createElement("span"); w.className = "w";
-            const inner = document.createElement("span"); inner.textContent = part; inner.style.setProperty("--i", i++);
-            w.append(inner); frag.append(w);
-          });
-          child.replaceWith(frag);
-        } else if (child.nodeType === Node.ELEMENT_NODE) { wrapWords(child); }
-      });
-    };
-    wrapWords(el);
-  });
-
-  // Reveal blocks and headings as they scroll into view.
-  const io = new IntersectionObserver((entries) => {
-    entries.forEach((en) => { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } });
-  }, { threshold: 0.15 });
-  document.querySelectorAll(".reveal, .split").forEach((el) => io.observe(el));
-
-  // Stack one stone per step as the steps scroll past the middle of the screen.
-  const stones = [...document.querySelectorAll(".stone")];
-  const stoneNum = document.getElementById("stoneNum");
-  const steps = [...document.querySelectorAll(".step")];
-  const updateCairn = () => {
-    const mid = innerHeight * 0.62;
-    let placed = 0;
-    steps.forEach((s, idx) => { if (s.getBoundingClientRect().top < mid) placed = idx + 1; });
-    stones.forEach((st, idx) => { st.classList.toggle("on", idx < placed); st.classList.toggle("lit", idx === placed - 1); });
-    stoneNum.textContent = placed;
-  };
-
-  // Header background, rock parallax and cairn, on scroll.
-  const hdr = document.getElementById("hdr");
-  const rocks = document.getElementById("rocks");
-  let ticking = false;
-  const onScroll = () => {
-    if (ticking) return; ticking = true;
-    requestAnimationFrame(() => {
-      hdr.classList.toggle("solid", scrollY > 40);
-      if (!reduce) rocks.style.setProperty("--py", `${Math.min(scrollY * 0.25, 200)}px`);
-      updateCairn();
-      ticking = false;
-    });
-  };
-  addEventListener("scroll", onScroll, { passive: true });
-  updateCairn();
-
-  // Slide the light along the planet rim toward the pointer.
-  const planet = document.getElementById("planet");
-  if (!reduce) {
-    addEventListener("pointermove", (e) => {
-      const r = planet.getBoundingClientRect();
-      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      const ang = Math.atan2(e.clientX - cx, cy - e.clientY) * 180 / Math.PI;
-      planet.style.setProperty("--ang", `${ang}deg`);
-    });
-  }
-
-  // Crimson spotlight that follows the pointer on feature cards.
-  document.querySelectorAll(".f").forEach((card) => {
-    card.addEventListener("pointermove", (e) => {
-      const r = card.getBoundingClientRect();
-      card.style.setProperty("--mx", `${e.clientX - r.left}px`);
-      card.style.setProperty("--my", `${e.clientY - r.top}px`);
-    });
-  });
-
-  // Latest version and APK links from GitHub; the static links above are the fallback.
-  (async () => {
-    try {
-      const r = await fetch("https://api.github.com/repos/Janardanpal007/Ghostream/releases/latest", { headers: { Accept: "application/vnd.github+json" } });
-      if (!r.ok) return;
-      const rel = await r.json();
-      const ver = (rel.tag_name || "").replace(/^v/, "");
-      if (!ver) return;
-      document.getElementById("ver").textContent = ver;
-      document.getElementById("hero-ver").textContent = ver;
-      document.getElementById("dl-arm64").href = `https://github.com/Janardanpal007/Ghostream/releases/download/${rel.tag_name}/Ghostream-${ver}-android-arm64.apk`;
-      document.getElementById("dl-universal").href = `https://github.com/Janardanpal007/Ghostream/releases/download/${rel.tag_name}/Ghostream-${ver}-android-universal.apk`;
-    } catch (e) { /* offline or rate-limited: keep the static links */ }
-  })();
-</script>
+<footer class="footer"><div class="wrap footer-top"><a class="brand" href="#top"><img src="assets/ghost.svg" width="32" height="32" alt="">Ghostream</a><p>Browse. Block. Download. Feel safe.</p><div class="footer-links"><a href="https://github.com/Janardanpal007/Ghostream" target="_blank" rel="noopener">GitHub ↗</a><a href="https://github.com/Janardanpal007/Ghostream/releases" target="_blank" rel="noopener">All releases ↗</a><a href="https://github.com/Janardanpal007/Ghostream/blob/main/android/LICENSE" target="_blank" rel="noopener">GPL v3 ↗</a></div></div><div class="wrap footer-bottom"><span>Built by Janardan Pal.</span><span>Android is a trademark of Google LLC.</span><a href="#top">Back to top ↑</a></div></footer>
+<dialog id="screen-dialog" aria-labelledby="dialog-title"><div class="dialog-toolbar"><h2 id="dialog-title">Browse — app screenshot</h2><button class="icon-button close-dialog" aria-label="Close screenshot"><svg><use href="#i-close"/></svg></button></div><img id="dialog-image" src="screenshots/web/browse.webp" width="540" height="1200" alt="Ghostream browsing NASA with the shield in the address bar"><p>Actual app screenshot from the Ghostream repository.</p></dialog>
+<svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+<symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 3v13m-5-5 5 5 5-5M5 18v3h14v-3"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol><symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></symbol><symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-6 5-6 13 0 18 6-5 6-13 0-18Z"/></symbol><symbol id="i-book" viewBox="0 0 24 24"><path d="M12 5C9 3 5 3 2 4v15c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1Zm0 0v15"/></symbol><symbol id="i-code" viewBox="0 0 24 24"><path d="m7 6-6 6 6 6m10-12 6 6-6 6M14 3l-4 18"/></symbol><symbol id="i-downloads" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 15v5h16v-5M5 7H3v4m16-4h2v4"/></symbol><symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-3c0-3 4-5 8-5s8 2 8 5v3"/></symbol><symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 5h7l2 3h9v12H3V5Z"/></symbol><symbol id="i-android" viewBox="0 0 24 24"><path d="m6 3 2 3m10-3-2 3M4 12a8 8 0 0 1 16 0H4Zm1 3v5h14v-5M8 20v2m8-2v2M2 14v5m20-5v5"/><path d="M8 10h.01M16 10h.01"/></symbol><symbol id="i-rotate" viewBox="0 0 24 24"><path d="M5 8a8 8 0 1 1-1 7M2 3v6h6"/></symbol><symbol id="i-expand" viewBox="0 0 24 24"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 8h13v13H8V8ZM16 8V3H3v13h5"/></symbol><symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol><symbol id="i-close" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19"/></symbol>
+</defs></svg>
 </body>
 </html>
