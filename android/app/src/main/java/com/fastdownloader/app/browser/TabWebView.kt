@@ -29,6 +29,7 @@ import androidx.webkit.WebViewFeature
 import com.fastdownloader.app.BuildConfig
 import com.fastdownloader.app.engine.AdBlock
 import com.fastdownloader.app.engine.Categories
+import com.fastdownloader.app.engine.DeviceProfile
 import com.fastdownloader.app.engine.Engine
 import com.fastdownloader.app.engine.Filters
 import com.fastdownloader.app.engine.Links
@@ -196,7 +197,7 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
     @JavascriptInterface
     fun youtubeQuality(): String = when (val q = Engine.settings.youtubeQuality) {
         "auto" -> ""
-        "wifi" -> if (Engine.metered) "hd720" else "highest"
+        "wifi" -> if (Engine.metered) "hd720" else DeviceProfile.wifiQuality
         else -> q
     }
 
@@ -356,6 +357,9 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             if (Links.isMagnet(target)) { host.download(tab, AddRequest(target)); return true }
             if (request.url.scheme !in setOf("http", "https")) {
                 // intent:, market:, tel: and the like open in the app that handles them, when the user tapped.
+                // An ad that tries to open another app is stopped, as the ad blocker stops ad pop-ups.
+                val adOpensApp = state.blocking() && Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true
+                if (adOpensApp) { blocked++; BrowserStore.countBlocked(); return true }
                 if (request.hasGesture()) runCatching {
                     val intent = if (target.startsWith("intent:")) android.content.Intent.parseUri(target, android.content.Intent.URI_INTENT_SCHEME)
                     else android.content.Intent(android.content.Intent.ACTION_VIEW, request.url)

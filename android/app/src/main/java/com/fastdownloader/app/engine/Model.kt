@@ -111,7 +111,7 @@ data class Settings(
     val autoLandscape: Boolean = true,
     /** Leaving the app during a full-screen video keeps it playing in a small window. */
     val autoPip: Boolean = true,
-    /** YouTube picture quality: "wifi" (highest on Wi-Fi, 720p on mobile data), "highest", "hd1080", "hd720" or "auto". */
+    /** YouTube picture quality: "wifi" (1080p on Wi-Fi, 720p on mobile data), "highest", "hd1080", "hd720" or "auto". */
     val youtubeQuality: String = "wifi",
     /** Links to files (zip, apk, pdf…) open the download panel instead of a blank page. */
     val detectFileLinks: Boolean = true,

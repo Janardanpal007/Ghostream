@@ -162,7 +162,7 @@ fun SettingsScreen() {
             Section("Player") {
                     ChoiceList(
                         "YouTube quality",
-                        listOf("wifi" to "Best on Wi-Fi", "highest" to "Highest", "hd1080" to "1080p", "hd720" to "720p", "auto" to "Auto"),
+                        listOf("wifi" to "1080p on Wi-Fi","highest" to "Highest", "hd1080" to "1080p", "hd720" to "720p", "auto" to "Auto"),
                         s.youtubeQuality,
                     ) { v -> set { it.copy(youtubeQuality = v) } }
                     ChoiceList("Full-screen shape", VideoCtl.FITS, s.videoFit) { v -> set { it.copy(videoFit = v) } }
@@ -258,7 +258,7 @@ private fun SettingsHome(s: Settings, onOpen: (SettingsPage) -> Unit) {
             GroupRow(Icons.Globe, "Browser", engine + if (s.restoreTabs) " · reopens tabs" else "") { onOpen(SettingsPage.BROWSER) }
             GroupRow(Icons.Key, "Passwords", if (vault.logins.isEmpty()) "Fingerprint, import from Google" else "${vault.logins.size} saved · fingerprint") { onOpen(SettingsPage.PASSWORDS) }
             GroupRow(Icons.Shield, "Shields & privacy", if (s.blockAds) "Blocking ads & trackers" else "Ad blocking is off") { onOpen(SettingsPage.SHIELDS) }
-            val quality = mapOf("wifi" to "best on Wi-Fi", "highest" to "highest", "hd1080" to "1080p", "hd720" to "720p", "auto" to "auto")[s.youtubeQuality] ?: s.youtubeQuality
+            val quality = mapOf("wifi" to "1080p on Wi-Fi","highest" to "highest", "hd1080" to "1080p", "hd720" to "720p", "auto" to "auto")[s.youtubeQuality] ?: s.youtubeQuality
             GroupRow(Icons.Video, "Video", "YouTube $quality · " + s.videoContainer.uppercase()) { onOpen(SettingsPage.VIDEO) }
             GroupRow(Icons.Folder, "Downloads", "${s.maxConcurrent} at once · ${s.segments} parts" + if (s.wifiOnly) " · Wi-Fi only" else "") { onOpen(SettingsPage.DOWNLOADS) }
             GroupRow(Icons.TextSize, "Appearance", mapOf("system" to "Auto theme", "light" to "Light theme", "dark" to "Dark theme")[s.themeMode] ?: s.themeMode) { onOpen(SettingsPage.APPEARANCE) }
