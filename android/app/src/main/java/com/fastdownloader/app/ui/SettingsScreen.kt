@@ -161,10 +161,15 @@ fun SettingsScreen() {
         SettingsPage.VIDEO -> {
             Section("Player") {
                     ChoiceList(
-                        "YouTube quality",
+                        "YouTube quality on Wi-Fi",
                         listOf("wifi" to "1080p on Wi-Fi", "highest" to "Highest", "hd1440" to "2K (1440p)", "hd1080" to "1080p", "hd720" to "720p", "auto" to "Auto"),
                         s.youtubeQuality,
                     ) { v -> set { it.copy(youtubeQuality = v) } }
+                    ChoiceList(
+                        "YouTube quality on mobile data",
+                        listOf("hd1440" to "2K (1440p)", "hd1080" to "1080p", "hd720" to "720p", "highest" to "Highest", "auto" to "Auto"),
+                        s.youtubeQualityMobile,
+                    ) { v -> set { it.copy(youtubeQualityMobile = v) } }
                     ChoiceList("Full-screen shape", VideoCtl.FITS, s.videoFit) { v -> set { it.copy(videoFit = v) } }
                     Toggle("Turn sideways for full screen", "Upright videos stay upright", s.autoLandscape) { v -> set { it.copy(autoLandscape = v) } }
                     Toggle("Picture-in-picture", "Leaving the app while a video plays keeps it playing in a small window", s.autoPip, last = true) { v -> set { it.copy(autoPip = v) } }
@@ -259,7 +264,8 @@ private fun SettingsHome(s: Settings, onOpen: (SettingsPage) -> Unit) {
             GroupRow(Icons.Key, "Passwords", if (vault.logins.isEmpty()) "Fingerprint, import from Google" else "${vault.logins.size} saved · fingerprint") { onOpen(SettingsPage.PASSWORDS) }
             GroupRow(Icons.Shield, "Shields & privacy", if (s.blockAds) "Blocking ads & trackers" else "Ad blocking is off") { onOpen(SettingsPage.SHIELDS) }
             val quality = mapOf("wifi" to "1080p on Wi-Fi", "highest" to "highest", "hd1440" to "2K (1440p)", "hd1080" to "1080p", "hd720" to "720p", "auto" to "auto")[s.youtubeQuality] ?: s.youtubeQuality
-            GroupRow(Icons.Video, "Video", "YouTube $quality · " + s.videoContainer.uppercase()) { onOpen(SettingsPage.VIDEO) }
+            val mobile = mapOf("hd1440" to "2K", "hd1080" to "1080p", "hd720" to "720p", "highest" to "highest", "auto" to "auto")[s.youtubeQualityMobile] ?: s.youtubeQualityMobile
+            GroupRow(Icons.Video, "Video", "YouTube $quality on Wi-Fi, $mobile on mobile data · " + s.videoContainer.uppercase()) { onOpen(SettingsPage.VIDEO) }
             GroupRow(Icons.Folder, "Downloads", "${s.maxConcurrent} at once · ${s.segments} parts" + if (s.wifiOnly) " · Wi-Fi only" else "") { onOpen(SettingsPage.DOWNLOADS) }
             GroupRow(Icons.TextSize, "Appearance", mapOf("system" to "Auto theme", "light" to "Light theme", "dark" to "Dark theme")[s.themeMode] ?: s.themeMode) { onOpen(SettingsPage.APPEARANCE) }
             GroupRow(

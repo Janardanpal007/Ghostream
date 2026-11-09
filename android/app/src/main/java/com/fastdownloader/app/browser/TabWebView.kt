@@ -193,12 +193,15 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
     @JavascriptInterface
     fun youtubeAdsOff(): Boolean = state.blocking()
 
-    /** The quality YouTube should play at: "highest", "hd1080", "hd720", or "" to let YouTube choose. */
+    /** The quality YouTube should play at, for the current network: "highest", "hd1440", "hd1080", "hd720", or "" to let YouTube choose. */
     @JavascriptInterface
-    fun youtubeQuality(): String = when (val q = Engine.settings.youtubeQuality) {
-        "auto" -> ""
-        "wifi" -> if (Engine.metered) "hd720" else DeviceProfile.wifiQuality
-        else -> q
+    fun youtubeQuality(): String {
+        val settings = Engine.settings
+        return when (val choice = if (Engine.metered) settings.youtubeQualityMobile else settings.youtubeQuality) {
+            "auto" -> ""
+            "wifi" -> DeviceProfile.wifiQuality
+            else -> choice
+        }
     }
 
     @JavascriptInterface
