@@ -55,7 +55,7 @@ object Torrents {
 
     private fun pack(s: Settings): SettingsPack {
         val sp = SettingsPack()
-        sp.connectionsLimit(s.torrentConnections.coerceIn(20, 1000))
+        sp.connectionsLimit(Turbo.torrentConnections(s))
         sp.activeDownloads(8)
         sp.activeLimit(16)
         sp.downloadRateLimit(if (s.speedLimitKBps > 0) s.speedLimitKBps * 1024 else 0)
@@ -96,7 +96,7 @@ object Torrents {
 }
 
 /**
- * One torrent (magnet link or .torrent file), saved into Download/FastDownloader/Torrent.
+ * One torrent (magnet link or .torrent file), saved into Download/Ghostream/Torrent.
  * Pausing removes it from the session but keeps the files; resuming adds it again and
  * libtorrent checks what is already on disk, so it continues after restarts too.
  */

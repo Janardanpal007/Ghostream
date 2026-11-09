@@ -47,6 +47,7 @@ import com.fastdownloader.app.engine.Filters
 import com.fastdownloader.app.engine.Net
 import com.fastdownloader.app.engine.Format
 import com.fastdownloader.app.engine.Settings
+import com.fastdownloader.app.engine.Turbo
 import com.fastdownloader.app.engine.Updater
 import com.fastdownloader.app.engine.Ytdlp
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +57,7 @@ import kotlinx.coroutines.withContext
 /** The groups on the main Settings page; each opens its own page. */
 private enum class SettingsPage(val title: String) {
     BROWSER("Browser"), PASSWORDS("Passwords"), SHIELDS("Shields & privacy"), VIDEO("Video"),
-    DOWNLOADS("Downloads"), APPEARANCE("Appearance"), ABOUT("About"),
+    DOWNLOADS("Downloads"), APPEARANCE("Appearance"), TURBO("Ghostream Turbo"), ABOUT("About"),
 }
 
 @Composable
@@ -66,6 +67,7 @@ fun SettingsScreen() {
     val scope = rememberCoroutineScope()
     val s by Engine.settingsFlow.collectAsState()
     fun set(change: (Settings) -> Settings) = Engine.updateSettings(change)
+    val turbo = Turbo.current(s) is Turbo.Result.Valid
     var ipResult by remember { mutableStateOf<String?>(null) }
     var ytdlpStatus by remember { mutableStateOf<String?>(null) }
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
@@ -159,16 +161,17 @@ fun SettingsScreen() {
             }
         }
         SettingsPage.VIDEO -> {
+            val lockedQualities = if (turbo) emptySet() else Turbo.TURBO_QUALITIES
             Section("Player") {
                     ChoiceList(
                         "YouTube quality on Wi-Fi",
-                        listOf("wifi" to "1080p on Wi-Fi", "highest" to "Highest", "hd1440" to "2K (1440p)", "hd1080" to "1080p", "hd720" to "720p", "auto" to "Auto"),
-                        s.youtubeQuality,
+                        listOf("wifi" to "Best for this phone", "highest" to "Highest", "hd1440" to "2K (1440p)", "hd1080" to "1080p", "hd720" to "720p", "auto" to "Auto"),
+                        s.youtubeQuality, locked = lockedQualities,
                     ) { v -> set { it.copy(youtubeQuality = v) } }
                     ChoiceList(
                         "YouTube quality on mobile data",
                         listOf("hd1440" to "2K (1440p)", "hd1080" to "1080p", "hd720" to "720p", "highest" to "Highest", "auto" to "Auto"),
-                        s.youtubeQualityMobile,
+                        s.youtubeQualityMobile, locked = lockedQualities,
                     ) { v -> set { it.copy(youtubeQualityMobile = v) } }
                     ChoiceList("Full-screen shape", VideoCtl.FITS, s.videoFit) { v -> set { it.copy(videoFit = v) } }
                     Toggle("Turn sideways for full screen", "Upright videos stay upright", s.autoLandscape) { v -> set { it.copy(autoLandscape = v) } }
@@ -196,8 +199,8 @@ fun SettingsScreen() {
             Section("Downloads") {
                     Info("Download folder", Engine.rootDir.path.substringAfter("/emulated/0/"))
                     Toggle("Sort into category folders", "ZIP, DOC, Programs, Videos, Music, Torrent, Images, Other", s.categorize) { v -> set { it.copy(categorize = v) } }
-                    Stepper("Downloads at once", s.maxConcurrent, 1..10) { v -> set { it.copy(maxConcurrent = v) } }
-                    Stepper("Parts per file", s.segments, 1..32, hint = "More parts = faster on most servers") { v -> set { it.copy(segments = v) } }
+                    Stepper("Downloads at once", Turbo.atOnce(s, turbo), 1..10, turboFrom = if (turbo) null else Turbo.FREE_AT_ONCE + 1) { v -> set { it.copy(maxConcurrent = v) } }
+                    Stepper("Parts per file", Turbo.parts(s, turbo), 1..32, hint = "More parts = faster on most servers", turboFrom = if (turbo) null else Turbo.FREE_PARTS + 1) { v -> set { it.copy(segments = v) } }
                     NumberField("Speed limit (KB/s)", s.speedLimitKBps, "0 = no limit") { v -> set { it.copy(speedLimitKBps = v) } }
                     Toggle("Wi-Fi only", "Wait instead of using mobile data", s.wifiOnly) { v -> set { it.copy(wifiOnly = v) } }
                     Toggle("Catch copied links", "Offer to download a link you copy", s.clipboardMonitor) { v -> set { it.copy(clipboardMonitor = v) } }
@@ -210,7 +213,10 @@ fun SettingsScreen() {
                     }
             }
             Section("Torrents") {
-                    Stepper("Max connections", s.torrentConnections, 20..1000, step = 10) { v -> set { it.copy(torrentConnections = v) } }
+                    Stepper(
+                        "Max connections", Turbo.torrentConnections(s, turbo), 20..1000, step = 10,
+                        turboFrom = if (turbo) null else Turbo.FREE_TORRENT_CONNECTIONS + 1,
+                    ) { v -> set { it.copy(torrentConnections = v) } }
                     Toggle("Extra public trackers", "Finds more peers for magnet links", s.torrentExtraTrackers) { v -> set { it.copy(torrentExtraTrackers = v) } }
                     Toggle(
                         "Only over a VPN", "Kill switch: torrents pause whenever no VPN is connected" + if (Engine.onVpn) " · VPN on now" else " · no VPN now",
@@ -222,11 +228,13 @@ fun SettingsScreen() {
             Spacer(Modifier.height(12.dp))
             Card {
                     Choice("Theme", listOf("system" to "Auto", "light" to "Light", "dark" to "Dark"), s.themeMode) { v -> set { it.copy(themeMode = v) } }
+                    ThemeColorPicker(s.themeColor, dark = colors.bg == DarkPalette.bg) { v -> set { it.copy(themeColor = v) } }
                     Stepper("Page text size (%)", s.textZoom, 50..200, step = 10, hint = "Applies to tabs opened from now on") { v -> set { it.copy(textZoom = v) } }
                     Toggle("Shields totals on the start page", null, s.showHomeStats) { v -> set { it.copy(showHomeStats = v) } }
                     Toggle("Top sites on the start page", "Your most visited sites, from history", s.showTopSites, last = true) { v -> set { it.copy(showTopSites = v) } }
             }
         }
+        SettingsPage.TURBO -> TurboPage()
         SettingsPage.ABOUT -> {
             Section("About") {
                     Info("Ghostream", "Version ${BuildConfig.VERSION_NAME} for Android 8 to 17")
@@ -263,11 +271,16 @@ private fun SettingsHome(s: Settings, onOpen: (SettingsPage) -> Unit) {
             GroupRow(Icons.Globe, "Browser", engine + if (s.restoreTabs) " · reopens tabs" else "") { onOpen(SettingsPage.BROWSER) }
             GroupRow(Icons.Key, "Passwords", if (vault.logins.isEmpty()) "Fingerprint, import from Google" else "${vault.logins.size} saved · fingerprint") { onOpen(SettingsPage.PASSWORDS) }
             GroupRow(Icons.Shield, "Shields & privacy", if (s.blockAds) "Blocking ads & trackers" else "Ad blocking is off") { onOpen(SettingsPage.SHIELDS) }
-            val quality = mapOf("wifi" to "1080p on Wi-Fi", "highest" to "highest", "hd1440" to "2K (1440p)", "hd1080" to "1080p", "hd720" to "720p", "auto" to "auto")[s.youtubeQuality] ?: s.youtubeQuality
+            val quality = mapOf("wifi" to "best for this phone", "highest" to "highest", "hd1440" to "2K (1440p)", "hd1080" to "1080p", "hd720" to "720p", "auto" to "auto")[s.youtubeQuality] ?: s.youtubeQuality
             val mobile = mapOf("hd1440" to "2K", "hd1080" to "1080p", "hd720" to "720p", "highest" to "highest", "auto" to "auto")[s.youtubeQualityMobile] ?: s.youtubeQualityMobile
             GroupRow(Icons.Video, "Video", "YouTube $quality on Wi-Fi, $mobile on mobile data · " + s.videoContainer.uppercase()) { onOpen(SettingsPage.VIDEO) }
-            GroupRow(Icons.Folder, "Downloads", "${s.maxConcurrent} at once · ${s.segments} parts" + if (s.wifiOnly) " · Wi-Fi only" else "") { onOpen(SettingsPage.DOWNLOADS) }
-            GroupRow(Icons.TextSize, "Appearance", mapOf("system" to "Auto theme", "light" to "Light theme", "dark" to "Dark theme")[s.themeMode] ?: s.themeMode) { onOpen(SettingsPage.APPEARANCE) }
+            GroupRow(Icons.Folder, "Downloads", "${Turbo.atOnce(s)} at once · ${Turbo.parts(s)} parts" + if (s.wifiOnly) " · Wi-Fi only" else "") { onOpen(SettingsPage.DOWNLOADS) }
+            GroupRow(
+                Icons.TextSize, "Appearance",
+                (mapOf("system" to "Auto theme", "light" to "Light theme", "dark" to "Dark theme")[s.themeMode] ?: s.themeMode) +
+                    " · " + (THEME_COLORS.firstOrNull { it.id == s.themeColor }?.label ?: "Classic"),
+            ) { onOpen(SettingsPage.APPEARANCE) }
+            GroupRow(Icons.Speed, "Ghostream Turbo", turboSummary()) { onOpen(SettingsPage.TURBO) }
             GroupRow(
                 Icons.Info, "About",
                 update.available?.let { "Version ${it.version} is available" } ?: "Version ${BuildConfig.VERSION_NAME} · updates, contact",
@@ -425,16 +438,29 @@ private fun Toggle(title: String, hint: String?, value: Boolean, last: Boolean =
 }
 
 @Composable
-private fun Stepper(title: String, value: Int, range: IntRange, step: Int = 1, hint: String? = null, onChange: (Int) -> Unit) {
+private fun Stepper(
+    title: String, value: Int, range: IntRange, step: Int = 1, hint: String? = null,
+    /** Values from here up need Turbo (null = nothing locked). */
+    turboFrom: Int? = null,
+    onChange: (Int) -> Unit,
+) {
     val c = colors
+    val ctx = LocalContext.current
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = Type.strong, color = c.text)
-            if (hint != null) Text(hint, style = Type.small, color = c.muted)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = Type.strong, color = c.text)
+                if (turboFrom != null) TurboTag()
+            }
+            val limit = turboFrom?.let { "Free up to ${it - 1}; more with Turbo" }
+            listOfNotNull(hint, limit).joinToString(" · ").takeIf { it.isNotEmpty() }?.let { Text(it, style = Type.small, color = c.muted) }
         }
         IconBox(Icons.Minus, "Less") { onChange((value - step).coerceIn(range)) }
         Box(Modifier.width(56.dp), contentAlignment = Alignment.Center) { Text("$value", style = Type.heading, color = c.text) }
-        IconBox(Icons.Add, "More") { onChange((value + step).coerceIn(range)) }
+        IconBox(Icons.Add, "More") {
+            val next = (value + step).coerceIn(range)
+            if (turboFrom != null && next >= turboFrom) TurboNudge.show(ctx, "Higher values") else onChange(next)
+        }
     }
     Divider()
 }
@@ -452,12 +478,21 @@ private fun Choice(title: String, options: List<Pair<String, String>>, value: St
 
 /** A choice with many options: the options scroll sideways under the title. */
 @Composable
-private fun ChoiceList(title: String, options: List<Pair<String, String>>, value: String, onChange: (String) -> Unit) {
+private fun ChoiceList(
+    title: String, options: List<Pair<String, String>>, value: String,
+    /** Options that need Turbo: shown with "· TURBO", and tapping them explains instead of choosing. */
+    locked: Set<String> = emptySet(),
+    onChange: (String) -> Unit,
+) {
+    val ctx = LocalContext.current
     Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         Text(title, style = Type.strong, color = colors.text, modifier = Modifier.padding(horizontal = 16.dp))
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for ((key, label) in options) Chip(label, value == key) { onChange(key) }
+            for ((key, label) in options) {
+                if (key in locked) Chip("$label · Turbo", false) { TurboNudge.show(ctx, label) }
+                else Chip(label, value == key) { onChange(key) }
+            }
         }
     }
     Divider()

@@ -55,6 +55,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -64,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fastdownloader.app.R
 import com.fastdownloader.app.browser.BrowserStore
 import com.fastdownloader.app.browser.BrowserTab
 import com.fastdownloader.app.browser.Omnibox
@@ -335,10 +338,18 @@ fun HomePage(private: Boolean, onOpen: (String) -> Unit, onSearch: () -> Unit) {
             Spacer(Modifier.height(40.dp))
             AnimatedVisibility(enter, enter = fadeIn() + scaleIn(initialScale = 0.9f)) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        Modifier.size(64.dp).clip(Shape.card).background(Brush.linearGradient(listOf(c.accent, c.accent2))),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(if (private) Icons.Private else Icons.Download, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
+                    if (private) {
+                        Box(
+                            Modifier.size(64.dp).clip(Shape.card).background(Brush.linearGradient(listOf(c.accent, c.accent2))),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Private, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
+                    } else {
+                        // The ghost, as on the launcher icon and the website.
+                        Image(
+                            painterResource(R.drawable.ic_launcher_foreground), "Ghostream",
+                            Modifier.size(64.dp).clip(Shape.card).background(colorResource(R.color.icon_background)),
+                        )
+                    }
                     Spacer(Modifier.height(14.dp))
                     Text(if (private) "Private tab" else "Ghostream", style = Type.title, color = fg)
                     Text(

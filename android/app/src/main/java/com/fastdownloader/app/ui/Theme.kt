@@ -103,9 +103,9 @@ object Shape {
 
 @Composable
 fun FastTheme(content: @Composable () -> Unit) {
-    val mode = com.fastdownloader.app.engine.Engine.settingsFlow.collectAsState().value.themeMode
-    val dark = when (mode) { "light" -> false; "dark" -> true; else -> isSystemInDarkTheme() }
-    val p = if (dark) DarkPalette else LightPalette
+    val settings = com.fastdownloader.app.engine.Engine.settingsFlow.collectAsState().value
+    val dark = when (settings.themeMode) { "light" -> false; "dark" -> true; else -> isSystemInDarkTheme() }
+    val p = (if (dark) DarkPalette else LightPalette).withColor(settings.themeColor, dark)
     val scheme: ColorScheme = (if (dark) darkColorScheme() else lightColorScheme()).copy(
         primary = p.solidBg, onPrimary = p.solidFg, secondary = p.accent, background = p.bg, onBackground = p.text,
         surface = p.panel, onSurface = p.text, surfaceVariant = p.panel2, onSurfaceVariant = p.muted,

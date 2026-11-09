@@ -2,7 +2,20 @@
   'use strict';
   const SCREEN_DIR = 'screenshots/web/';
   const DEFAULT_ANGLE = '-15';
-  const RELEASE_BASE = 'https://github.com/Janardanpal007/Ghostream/releases/download/v1.3.8/';
+  /**
+   * Ghostream Turbo payment settings. While upiId or email is empty the page shows "Turbo opens soon"
+   * instead of the payment steps. qr is a QR image of the UPI link (made once, saved in assets/).
+   */
+  const TURBO = {
+    upiId: 'janardanpal007-2@okhdfcbank',
+    payee: 'Janardan Pal',
+    price: 499,
+    term: 'lifetime',
+    email: 'janardanpal72@gmail.com',
+    hours: 24,
+    qr: 'assets/upi-qr.svg'
+  };
+  const RELEASE_BASE = 'https://github.com/Janardanpal007/Ghostream/releases/download/v2.0.0/';
   const features = {
     browse: { number:'01 / BROWSE', title:'Browse', image:'browse.webp', alt:'Ghostream browsing NASA with the shield in the address bar', description:'Tabs, bookmarks and your shield. Right where you need them.' },
     shield: { number:'02 / BLOCK', title:'Shields & privacy', image:'privacy.webp', alt:'Ghostream Shields and privacy settings showing ad blocking, HTTPS upgrades and cookie controls', description:'Open filter lists, HTTPS upgrades and cookie controls. Your settings, your choice.' },
@@ -10,8 +23,8 @@
     reader: { number:'04 / READ', title:'Reader mode', image:'reader.webp', alt:'Ghostream reader mode showing an article as clean, readable text', description:'Just the article, with clean text and adjustable type. A little room to focus.' }
   };
   const releases = {
-    arm64: { label:'ARM64', file:'Ghostream-1.3.8-android-arm64.apk', hash:'db5c7382808a1898b613e70a4df1b16f08634f409f44be43b55dd39662817bd0' },
-    universal: { label:'Universal', file:'Ghostream-1.3.8-android-universal.apk', hash:'d794952345e2b046a4a39756070828dda527e14ee2a93ff93aef7682783fa5b6' }
+    arm64: { label:'ARM64', file:'Ghostream-2.0.0-android-arm64.apk', hash:'2cc90fbb66f3516d337c88bdb79927d34c0a19a52922d012d397603513c24194' },
+    universal: { label:'Universal', file:'Ghostream-2.0.0-android-universal.apk', hash:'39b08ae9261a29841ee8e72bb6eaa6ee3dfd08f0cae740b4131703deaaa06ca4' }
   };
   const $ = (s) => document.querySelector(s);
   const tabs = [...document.querySelectorAll('[role="tab"]')];
@@ -128,6 +141,56 @@
     });
   }
 
+  /** The Turbo section: fills in price and UPI details, the UPI pay link, and the request form (opens email). */
+  function setupTurbo() {
+    if (!TURBO.upiId || !TURBO.email || !(TURBO.price > 0)) return; // stays on "Turbo opens soon"
+    const price = '₹' + TURBO.price.toLocaleString('en-IN');
+    const fill = { price, payee: TURBO.payee || TURBO.upiId, upi: TURBO.upiId, term: TURBO.term, hours: String(TURBO.hours) };
+    document.querySelectorAll('[data-turbo]').forEach(el => { el.textContent = fill[el.dataset.turbo] ?? el.textContent; });
+    $('#turbo-closed').hidden = true;
+    $('#turbo-open').hidden = false;
+
+    const params = new URLSearchParams({ pa: TURBO.upiId, pn: TURBO.payee || 'Ghostream', am: String(TURBO.price), cu: 'INR', tn: 'Ghostream Turbo' });
+    $('#upi-pay').href = 'upi://pay?' + params.toString().replace(/\+/g, '%20').replace(/%40/g, '@'); // UPI apps expect a plain @
+    if (TURBO.qr) { $('#upi-qr').src = TURBO.qr; $('#upi-qr').hidden = false; }
+
+    $('.copy-upi').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(TURBO.upiId);
+        $('#upi-status').textContent = 'UPI ID copied.';
+      } catch {
+        $('#upi-status').textContent = 'Select and copy the UPI ID shown above.';
+      }
+    });
+
+    const form = $('#turbo-form');
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(form));
+      const name = String(data.name || '').trim();
+      const email = String(data.email || '').trim();
+      const utr = String(data.utr || '').replace(/\s/g, '');
+      const error = turboFormError(name, email, utr);
+      $('#turbo-error').textContent = error;
+      if (error) return;
+      const subject = 'Ghostream Turbo key request: ' + name;
+      const body = [
+        'Hi, I paid for Ghostream Turbo by UPI. Please send my key.', '',
+        'Name: ' + name, 'Email: ' + email, 'UPI transaction ID (UTR): ' + utr,
+        'Amount: ' + price + ' (' + TURBO.term + ')'
+      ].join('\n');
+      window.location.href = 'mailto:' + TURBO.email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    });
+  }
+
+  /** @returns {string} what's wrong with the form, or '' when it can be sent */
+  function turboFormError(name, email, utr) {
+    if (name.length < 2) return 'Please enter your name.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Please enter a valid email, so your key can reach you.';
+    if (!/^\d{12}$/.test(utr)) return 'The UPI transaction ID (UTR) is 12 digits. Find it in your payment app’s receipt.';
+    return '';
+  }
+
   function setupMotion() {
     const motionButton = $('.motion-toggle');
     const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -149,6 +212,7 @@
   setupDialog();
   setupMenu();
   setupDownloads();
+  setupTurbo();
   setupMotion();
   updateAngle();
   // Preload the other app screens once the page has loaded.

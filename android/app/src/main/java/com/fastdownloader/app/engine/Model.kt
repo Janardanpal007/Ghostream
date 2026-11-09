@@ -93,6 +93,8 @@ data class Settings(
     val showTopSites: Boolean = true,
     /** system | light | dark */
     val themeMode: String = "system",
+    /** Colour theme id from THEME_COLORS ("classic" = black/white buttons). */
+    val themeColor: String = "classic",
     /** Page text size, percent. */
     val textZoom: Int = 100,
     /** New tabs ask for desktop pages. */
@@ -119,6 +121,14 @@ data class Settings(
     val detectFileLinks: Boolean = true,
     /** Browser downloads start without the panel when the file needs no choices. */
     val quickDownload: Boolean = false,
+
+    // ---------- Ghostream Turbo ----------
+    /** The 10-character Turbo key the user activated ("" = free). */
+    val turboKey: String = "",
+    /** Its one-way hash, as listed on the website; what [Turbo.current] checks. */
+    val turboHash: String = "",
+    /** The website's turbo-keys.txt, saved at activation and refreshed with the update check (works offline). */
+    val turboList: List<String> = emptyList(),
 ) {
     val proxyOn get() = proxyType != "none" && proxyHost.isNotBlank() && proxyPort in 1..65535
 }

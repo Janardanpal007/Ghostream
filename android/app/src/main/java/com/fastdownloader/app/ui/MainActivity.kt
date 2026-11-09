@@ -97,9 +97,10 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             fileCallback = callback
             runCatching { pickFiles.launch(params.createIntent()); true }.getOrElse { fileCallback = null; false }
         }
+        val official = com.fastdownloader.app.engine.Integrity.official(this)
         setContent {
             FastTheme {
-                Root(
+                if (!official) NotOfficial() else Root(
                     tab = tab,
                     onTab = { tab = it },
                     addRequest = addRequest,
@@ -173,7 +174,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     /** Clipboard catcher. Android only lets the app read it while on screen, so it's checked on focus. */
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus || !Engine.settings.clipboardMonitor || addRequest != null) return
+        // Downloading a copied link is Paste any link, a Turbo feature.
+        if (!hasFocus || !Engine.settings.clipboardMonitor || addRequest != null || !com.fastdownloader.app.engine.Turbo.active) return
         val cm = getSystemService(ClipboardManager::class.java)
         val text = runCatching { cm.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString() }.getOrNull() ?: return
         if (text == lastClip) return

@@ -34,6 +34,7 @@ import com.fastdownloader.app.engine.Engine
 import com.fastdownloader.app.engine.Filters
 import com.fastdownloader.app.engine.Links
 import com.fastdownloader.app.engine.Net
+import com.fastdownloader.app.engine.Turbo
 import com.fastdownloader.app.ui.AddRequest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
@@ -197,7 +198,7 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
     @JavascriptInterface
     fun youtubeQuality(): String {
         val settings = Engine.settings
-        return when (val choice = if (Engine.metered) settings.youtubeQualityMobile else settings.youtubeQuality) {
+        return when (val choice = Turbo.youtubeChoice(if (Engine.metered) settings.youtubeQualityMobile else settings.youtubeQuality)) {
             "auto" -> ""
             "wifi" -> DeviceProfile.wifiQuality
             else -> choice

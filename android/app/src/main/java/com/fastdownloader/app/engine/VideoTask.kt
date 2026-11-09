@@ -178,7 +178,7 @@ object Ytdlp {
 }
 
 /**
- * Downloads a video with yt-dlp into Download/FastDownloader/Videos (or Music for audio only).
+ * Downloads a video with yt-dlp into Download/Ghostream/Videos (or Music for audio only).
  * Unfinished parts stay in the app's cache folder, so pausing and resuming continues them.
  */
 class VideoTask(

@@ -52,6 +52,7 @@ import com.fastdownloader.app.engine.Links
 import com.fastdownloader.app.engine.Net
 import com.fastdownloader.app.engine.Probe
 import com.fastdownloader.app.engine.Torrents
+import com.fastdownloader.app.engine.Turbo
 import com.fastdownloader.app.engine.VideoDetails
 import com.fastdownloader.app.engine.Ytdlp
 import kotlinx.coroutines.Dispatchers
@@ -126,6 +127,9 @@ fun AddPanel(request: AddRequest, onClose: () -> Unit, withStorage: (() -> Unit)
     var fileName by remember(request) { mutableStateOf("") }
     var quality by remember(request) { mutableIntStateOf(0) }
     var checkedUrl by remember(request) { mutableStateOf<String?>(null) }
+    // Pasting any link is Turbo. Free downloads start from the Browser tab, and that link can't be swapped here.
+    val locked = !request.fromBrowser && !Turbo.active
+    val fixedLink = request.fromBrowser && !Turbo.active
 
     fun check() {
         val u = url.trim()
@@ -137,12 +141,14 @@ fun AddPanel(request: AddRequest, onClose: () -> Unit, withStorage: (() -> Unit)
             if (checkedUrl != u) return@launch
             found = r
             if (r is Found.FileLink) fileName = r.probe.fileName
-            if (r is Found.Video) quality = r.details.defaultIndex
+            if (r is Found.Video) quality = firstAllowed(r.details)
         }
     }
 
     LaunchedEffect(request) {
-        if (request.url.isEmpty()) {
+        if (locked) {
+            return@LaunchedEffect
+        } else if (request.url.isEmpty()) {
             // Empty Add: offer the clipboard's link, if any.
             val clip = runCatching {
                 ctx.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString()
@@ -196,12 +202,17 @@ fun AddPanel(request: AddRequest, onClose: () -> Unit, withStorage: (() -> Unit)
             }
             Divider()
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(16.dp)) {
+                if (locked) {
+                    PasteLinkLocked()
+                    return@Column
+                }
                 Label("Link")
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = url,
                         onValueChange = { url = it; if (found !is Found.Checking) found = Found.Nothing },
+                        readOnly = fixedLink,
                         modifier = Modifier.weight(1f),
                         textStyle = Type.small.copy(color = c.text),
                         placeholder = { Text("https://…  or  magnet:?…", style = Type.small, color = c.muted) },
@@ -229,13 +240,15 @@ fun AddPanel(request: AddRequest, onClose: () -> Unit, withStorage: (() -> Unit)
                     }
                     is Found.FileLink -> FileDetails(f.probe, fileName) { fileName = it }
                     is Found.Video -> VideoChoices(f.details, quality) { quality = it }
-                    is Found.Torrent -> InfoRows(listOf("Type" to "Torrent", "Name" to f.name, "Saved in" to "Download/FastDownloader/Torrent"))
+                    is Found.Torrent -> InfoRows(listOf("Type" to "Torrent", "Name" to f.name, "Saved in" to "Download/${Engine.FOLDER}/Torrent"))
                 }
             }
             Divider()
             Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LineButton("Cancel", Modifier.weight(1f), onClick = onClose)
-                SolidButton(
+                if (locked) {
+                    SolidButton("Get Turbo", Modifier.weight(2f), icon = Icons.Speed) { TurboNudge.openPage(ctx) }
+                } else SolidButton(
                     "Download",
                     Modifier.weight(2f),
                     enabled = found is Found.FileLink || found is Found.Video || found is Found.Torrent,
@@ -245,6 +258,26 @@ fun AddPanel(request: AddRequest, onClose: () -> Unit, withStorage: (() -> Unit)
             }
         }
     }
+}
+
+/** Free plan: what Paste any link is, how to get it, and the free way to download. */
+@Composable
+private fun PasteLinkLocked() {
+    val c = colors
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Paste any link", style = Type.heading, color = c.text)
+        TurboTag()
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Paste or share any link (files, YouTube and 1,000+ other sites, streams, magnet links and torrents) and Ghostream downloads it. This is part of Ghostream Turbo.",
+        style = Type.body, color = c.muted,
+    )
+    Spacer(Modifier.height(12.dp))
+    Text(
+        "Free: open the page in the Browser tab and tap its download button, or hold a link and choose Download link. Have a key? Settings › Ghostream Turbo › Paste key.",
+        style = Type.body, color = c.text,
+    )
 }
 
 @Composable
@@ -267,7 +300,7 @@ private fun FileDetails(p: Probe, name: String, onName: (String) -> Unit) {
     InfoRows(
         listOf(
             "Size" to if (p.size > 0) Format.size(p.size) else "Unknown",
-            "Folder" to if (Engine.settings.categorize) "Download/FastDownloader/$cat" else "Download/FastDownloader",
+            "Folder" to if (Engine.settings.categorize) "Download/${Engine.FOLDER}/$cat" else "Download/${Engine.FOLDER}",
             "Speed-up" to if (p.resumable) "${Engine.settings.segments} parts at once · can pause and resume" else "One connection · this server can't resume",
         ),
     )
@@ -276,6 +309,7 @@ private fun FileDetails(p: Probe, name: String, onName: (String) -> Unit) {
 @Composable
 private fun VideoChoices(d: VideoDetails, selected: Int, onSelect: (Int) -> Unit) {
     val c = colors
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     Text(d.title, style = Type.strong, color = c.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
     Spacer(Modifier.height(4.dp))
     Text(
@@ -288,12 +322,15 @@ private fun VideoChoices(d: VideoDetails, selected: Int, onSelect: (Int) -> Unit
     Column(Modifier.fillMaxWidth().border(1.dp, c.border)) {
         d.qualities.forEachIndexed { i, q ->
             if (i > 0) Divider()
+            val locked = !Turbo.allowsHeight(q.height)
             Row(
-                Modifier.fillMaxWidth().background(if (i == selected) c.accentSoft else Color.Transparent).clickable { onSelect(i) }
+                Modifier.fillMaxWidth().background(if (i == selected) c.accentSoft else Color.Transparent)
+                    .clickable { if (locked) TurboNudge.show(ctx, "${q.label} downloads") else onSelect(i) }
                     .padding(horizontal = 12.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(q.label, style = Type.small.copy(color = c.text), modifier = Modifier.weight(1f))
+                Text(q.label, style = Type.small.copy(color = if (locked) c.muted else c.text), modifier = Modifier.weight(1f))
+                if (locked) TurboTag()
                 if (i == selected) Icon(Icons.Check, null, tint = c.accent, modifier = Modifier.size(18.dp))
             }
         }
@@ -301,8 +338,8 @@ private fun VideoChoices(d: VideoDetails, selected: Int, onSelect: (Int) -> Unit
     Spacer(Modifier.height(12.dp))
     val q = d.qualities.getOrNull(selected)
     Text(
-        if (q?.audio != null) "Saved in Download/FastDownloader/Music as ${q.audio.uppercase()}."
-        else "Saved in Download/FastDownloader/Videos as ${Engine.settings.videoContainer.uppercase()} (change in Settings › Videos).",
+        if (q?.audio != null) "Saved in Download/${Engine.FOLDER}/Music as ${q.audio.uppercase()}."
+        else "Saved in Download/${Engine.FOLDER}/Videos as ${Engine.settings.videoContainer.uppercase()} (change in Settings › Videos).",
         style = Type.body, color = c.muted,
     )
 }
@@ -320,3 +357,8 @@ fun InfoRows(rows: List<Pair<String, String>>) {
         }
     }
 }
+
+/** The quality to start on: the site's suggestion, unless it needs Turbo; then the best one that doesn't. */
+private fun firstAllowed(d: VideoDetails): Int =
+    d.defaultIndex.takeIf { Turbo.allowsHeight(d.qualities.getOrNull(it)?.height ?: 0) }
+        ?: d.qualities.indexOfFirst { Turbo.allowsHeight(it.height) }.coerceAtLeast(0)

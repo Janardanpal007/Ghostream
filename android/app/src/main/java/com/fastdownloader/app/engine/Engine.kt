@@ -24,6 +24,9 @@ import java.util.UUID
  * Saves progress every couple of seconds, so a download continues after the app or phone restarts.
  */
 object Engine {
+    /** The folder inside the phone's Download folder where downloads are saved. */
+    const val FOLDER = "Ghostream"
+
     private lateinit var app: Context
     private lateinit var store: Store
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -82,15 +85,15 @@ object Engine {
     @Volatile private var root: File? = null
 
     /**
-     * Download/FastDownloader. Android 11+ lets the app make files there without any permission, Android 8–10 with
+     * Download/Ghostream. Android 11+ lets the app make files there without any permission, Android 8–10 with
      * the storage permission. If it can't be written (permission refused, storage unavailable), downloads go to the
-     * app's own Download folder instead (Android/data/…/files/Download/FastDownloader), so they never fail for that.
+     * app's own Download folder instead (Android/data/…/files/Download/Ghostream), so they never fail for that.
      */
     val rootDir: File get() {
         root?.let { return it }
-        val public = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "FastDownloader")
+        val public = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), FOLDER)
         if ((public.isDirectory || public.mkdirs()) && public.canWrite()) return public.also { root = it }
-        return File(app.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: app.filesDir, "FastDownloader").also { it.mkdirs() }
+        return File(app.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: app.filesDir, FOLDER).also { it.mkdirs() }
     }
 
     fun dirFor(category: String): File = if (settings.categorize) File(rootDir, category) else rootDir
@@ -261,7 +264,7 @@ object Engine {
             if (item.status != Status.QUEUED) continue
             val reason = blockedReason(item)
             if (reason != null) { notes[item.id] = reason; continue }
-            if (running >= settings.maxConcurrent.coerceIn(1, 10)) { notes[item.id] = "Waiting in queue"; continue }
+            if (running >= Turbo.atOnce(settings)) { notes[item.id] = "Waiting in queue"; continue }
             notes.remove(item.id)
             start(item)
             running++
@@ -279,7 +282,7 @@ object Engine {
         if (!File(item.dir).exists()) File(item.dir).mkdirs()
         val s = settings
         val task: Task = when (item.kind) {
-            Kind.HTTP -> HttpTask(item, s.segments.coerceIn(1, 32), throttle) { finish(item, it) }
+            Kind.HTTP -> HttpTask(item, Turbo.parts(s), throttle) { finish(item, it) }
             Kind.TORRENT -> TorrentTask(item, s) { finish(item, it) }
             Kind.VIDEO -> VideoTask(app, item, s.videoContainer, throttle) { finish(item, it) }
         }

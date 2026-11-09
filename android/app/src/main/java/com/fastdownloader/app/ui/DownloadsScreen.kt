@@ -162,10 +162,14 @@ private fun Empty(nothingAtAll: Boolean, onAdd: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
         Label(if (nothingAtAll) "No downloads yet" else "Nothing here")
         Spacer(Modifier.height(8.dp))
-        Text("Paste a link, share one from any app, or find a video in the Browser tab.", style = Type.heading, color = c.text)
+        Text(
+            if (com.fastdownloader.app.engine.Turbo.active) "Paste a link, share one from any app, or find a video in the Browser tab."
+            else "Find a video or file in the Browser tab and tap its download button.",
+            style = Type.heading, color = c.text,
+        )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Files are saved in Download/FastDownloader, sorted into ZIP, DOC, Programs, Videos, Music, Torrent and other folders.",
+            "Files are saved in Download/${Engine.FOLDER}, sorted into ZIP, DOC, Programs, Videos, Music, Torrent and other folders.",
             style = Type.body, color = c.muted,
         )
         Spacer(Modifier.height(20.dp))
