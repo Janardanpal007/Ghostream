@@ -21,10 +21,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,6 +57,7 @@ fun DownloadsScreen(onAdd: () -> Unit) {
     val items by Engine.itemsFlow.collectAsState()
     val settings by Engine.settingsFlow.collectAsState()
     var filter by remember { mutableStateOf(ALL) }
+    var confirmDeleteAll by remember { mutableStateOf(false) }
 
     val shown = items.filter {
         when (filter) {
@@ -109,12 +112,35 @@ fun DownloadsScreen(onAdd: () -> Unit) {
 
         // Bulk actions
         if (items.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 if (items.any { it.status == Status.DOWNLOADING || it.status == Status.QUEUED }) LineButton("Pause all") { Engine.pauseAll() }
                 if (items.any { it.status == Status.PAUSED || it.status == Status.ERROR }) LineButton("Resume all") { Engine.resumeAll() }
                 if (items.any { it.status == Status.COMPLETED }) LineButton("Clear finished", color = c.muted) { Engine.clearCompleted() }
+                LineButton("Clear", color = c.muted) { Engine.clearAll() }
+                LineButton("Delete all", color = c.err) { confirmDeleteAll = true }
             }
             Divider()
+        }
+
+        if (confirmDeleteAll) {
+            AlertDialog(
+                onDismissRequest = { confirmDeleteAll = false },
+                containerColor = c.panel,
+                title = { Text("Delete all downloads?", style = Type.heading, color = c.text) },
+                text = {
+                    Text(
+                        "Every download is removed from the list, and its file is deleted from your phone. This can't be undone.",
+                        style = Type.body, color = c.muted,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { confirmDeleteAll = false; Engine.deleteAll() }) { Text("Delete all", color = c.err) }
+                },
+                dismissButton = { TextButton(onClick = { confirmDeleteAll = false }) { Text("Cancel", color = c.text) } },
+            )
         }
 
         if (shown.isEmpty()) {

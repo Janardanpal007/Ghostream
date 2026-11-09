@@ -222,6 +222,14 @@ object Engine {
     /** Forgets every finished download (the files stay). */
     fun clearHistory() = clearCompleted()
 
+    /** Removes every download from the list. Finished files stay; unfinished ones are stopped and their parts deleted. */
+    fun clearAll() = itemIds().forEach { remove(it, deleteFile = false) }
+
+    /** Removes every download and deletes its file too: finished files and unfinished parts. */
+    fun deleteAll() = itemIds().forEach { remove(it, deleteFile = true) }
+
+    private fun itemIds(): List<String> = synchronized(this) { items.map { it.id } }
+
     fun updateSettings(change: (Settings) -> Settings) {
         val next = change(settings)
         _settings.value = next
