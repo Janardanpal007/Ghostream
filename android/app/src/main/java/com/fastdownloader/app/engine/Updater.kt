@@ -24,7 +24,7 @@ import java.security.MessageDigest
  * release's SHA256SUMS.txt, and Android's own installer asks before updating.
  */
 object Updater {
-    private const val RELEASES_API = "https://api.github.com/repos/Janardanpal007/FastDownloader-Download/releases/latest"
+    private const val RELEASES_API = "https://api.github.com/repos/Janardanpal007/Ghostream/releases/latest"
     const val EVERY_MS = 6 * 3600_000L
 
     data class Release(val version: String, val page: String, val apkName: String?, val apkUrl: String?, val apkSize: Long, val sha256: String?)

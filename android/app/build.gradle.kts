@@ -26,7 +26,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.fastdownloader.app"
+        applicationId = "com.ghostream.app"
         minSdk = 26 // Android 8.0
         targetSdk = 37 // Android 17
         versionCode = vMajor * 10000 + vMinor * 100 + vPatch
@@ -62,12 +62,12 @@ android {
         }
     }
 
-    // One APK per processor type (smaller downloads) plus one that runs everywhere.
+    // An arm64 APK for modern phones (smaller download) plus one that runs everywhere.
     splits {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            include("arm64-v8a")
             isUniversalApk = true
         }
     }
