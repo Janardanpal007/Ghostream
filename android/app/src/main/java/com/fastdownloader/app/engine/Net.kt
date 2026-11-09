@@ -105,26 +105,40 @@ object Net {
         return b.build()
     }
 
-    /** Size, name and resume support, using a request for the first byte only. */
+    /** 503 (busy) and 429 (too many requests): worth asking again later, not a broken link. */
+    fun isBusy(code: Int) = code == 503 || code == 429
+
+    private const val PROBE_TRIES = 3
+
+    /** Size, name and resume support, using a request for the first byte only. A busy server is asked again. */
     fun probe(url: String, headers: Map<String, String>): Probe {
-        client.newCall(request(url, headers, "bytes=0-0")).execute().use { r ->
-            if (!r.isSuccessful) throw IOException(httpError(r.code))
-            val total = when (r.code) {
-                206 -> r.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull() ?: -1
-                else -> r.header("Content-Length")?.toLongOrNull() ?: -1
-            }
-            val mime = r.header("Content-Type")?.substringBefore(';')?.trim()?.lowercase()
-            val finalUrl = r.request.url.toString()
-            return Probe(
-                finalUrl = finalUrl,
-                size = total,
-                resumable = r.code == 206 && total > 0,
-                fileName = fileNameFor(r, finalUrl, mime),
-                mime = mime,
-                etag = r.header("ETag"),
-                lastModified = r.header("Last-Modified"),
-            )
+        var attempt = 1
+        while (true) {
+            val r = client.newCall(request(url, headers, "bytes=0-0")).execute()
+            if (!isBusy(r.code) || attempt >= PROBE_TRIES) return r.use(::probeResult)
+            val wait = HttpTask.busyDelayMs(attempt++, r.header("Retry-After"))
+            r.close()
+            Thread.sleep(wait)
         }
+    }
+
+    private fun probeResult(r: Response): Probe {
+        if (!r.isSuccessful) throw IOException(httpError(r.code))
+        val total = when (r.code) {
+            206 -> r.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull() ?: -1
+            else -> r.header("Content-Length")?.toLongOrNull() ?: -1
+        }
+        val mime = r.header("Content-Type")?.substringBefore(';')?.trim()?.lowercase()
+        val finalUrl = r.request.url.toString()
+        return Probe(
+            finalUrl = finalUrl,
+            size = total,
+            resumable = r.code == 206 && total > 0,
+            fileName = fileNameFor(r, finalUrl, mime),
+            mime = mime,
+            etag = r.header("ETag"),
+            lastModified = r.header("Last-Modified"),
+        )
     }
 
     fun httpError(code: Int) = when (code) {

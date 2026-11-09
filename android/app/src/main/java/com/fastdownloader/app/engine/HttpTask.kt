@@ -89,15 +89,23 @@ class HttpTask(
             if (raf.length() != item.total) raf.setLength(item.total)
             val channel = raf.channel
             val errors = Collections.synchronizedList(mutableListOf<Throwable>())
+            val crew = Crew(connections)
             val workers = (1..connections).map {
                 thread(name = "seg-${item.id}-$it") {
+                    // Stepped aside after the server refused it; tries again after a pause, since many
+                    // servers let an extra connection in now and then, and each one adds speed.
+                    var resting = false
                     try {
                         while (!stopped) {
+                            if (resting) {
+                                if (!restThenRejoin(crew)) break
+                                resting = false
+                            }
                             val seg = nextSegment() ?: break
                             try {
-                                fetch(seg, channel)
+                                resting = !fetch(seg, channel, crew)
                             } finally {
-                                busy.remove(seg)
+                                busy.remove(seg) // a resting connection's part goes back for the others
                             }
                         }
                     } catch (e: Throwable) {
@@ -105,6 +113,8 @@ class HttpTask(
                             errors += e
                             stop() // one part failed for good: stop the others and report it
                         }
+                    } finally {
+                        if (!resting) crew.leave()
                     }
                 }
             }
@@ -119,6 +129,23 @@ class HttpTask(
         }
     }
 
+    /**
+     * Waits [REJOIN_MS] (plus a little, so resting connections don't all knock at once), then rejoins the crew.
+     * False when there's no point any more: the download was stopped or nothing is left to fetch.
+     */
+    private fun restThenRejoin(crew: Crew): Boolean {
+        val until = System.currentTimeMillis() + REJOIN_MS + (Math.random() * REJOIN_JITTER_MS).toLong()
+        while (System.currentTimeMillis() < until) {
+            if (stopped || remaining() == 0L) return false
+            Thread.sleep(REST_STEP_MS)
+        }
+        if (stopped || remaining() == 0L) return false
+        crew.rejoin()
+        return true
+    }
+
+    private fun remaining() = synchronized(item) { item.segments.sumOf { it.remaining } }
+
     /** A part nobody is working on, or else half of the biggest one in progress. */
     private fun nextSegment(): Seg? = synchronized(item) {
         item.segments.firstOrNull { it.remaining > 0 && it !in busy }?.let { busy += it; return it }
@@ -132,9 +159,13 @@ class HttpTask(
         tail
     }
 
-    /** Downloads one part, retrying a few times if the connection drops. */
-    private fun fetch(seg: Seg, channel: FileChannel) {
+    /**
+     * Downloads one part, retrying a few times if the connection drops. Returns false when this connection
+     * steps aside: the server is refusing extra connections (503/429) while the others still download.
+     */
+    private fun fetch(seg: Seg, channel: FileChannel, crew: Crew): Boolean {
         var attempt = 0
+        var busyAttempt = 0
         while (!stopped && seg.remaining > 0) {
             try {
                 val from = synchronized(item) { seg.pos }
@@ -144,6 +175,7 @@ class HttpTask(
                 try {
                     call.execute().use { r ->
                         if (r.code != 206) {
+                            if (Net.isBusy(r.code)) throw ServerBusy(r.code, r.header("Retry-After"))
                             if (r.code == 200) throw FatalError("The server stopped accepting partial downloads. Remove this download and add it again.")
                             if (r.code in 400..499 && r.code != 408 && r.code != 429) throw FatalError(Net.httpError(r.code))
                             throw IOException(Net.httpError(r.code))
@@ -167,6 +199,7 @@ class HttpTask(
                                 item.received += write
                             }
                             attempt = 0
+                            busyAttempt = 0
                             throttle.take(write)
                             if (write < n) break
                         }
@@ -176,12 +209,20 @@ class HttpTask(
                 }
             } catch (e: FatalError) {
                 throw e
+            } catch (e: ServerBusy) {
+                if (stopped) return true
+                // The site allows fewer connections than we opened: this one steps aside, the rest carry on.
+                if (crew.tryRetire()) return false
+                // The last connection waits for the site instead of failing the download.
+                if (++busyAttempt > BUSY_RETRIES) throw FatalError(Net.httpError(e.code))
+                Thread.sleep(busyDelayMs(busyAttempt, e.retryAfter))
             } catch (e: IOException) {
-                if (stopped) return
+                if (stopped) return true
                 if (++attempt > RETRIES) throw e
                 Thread.sleep(minOf(1000L shl (attempt - 1), 15_000L))
             }
         }
+        return true
     }
 
     /** No resume support or unknown size: one connection, from the start. */
@@ -238,11 +279,45 @@ class HttpTask(
 
     private class FatalError(message: String) : IOException(message)
 
+    /** The server is busy or limiting connections (HTTP 503/429). */
+    private class ServerBusy(val code: Int, val retryAfter: String?) : IOException(Net.httpError(code))
+
+    /**
+     * How many connections are still downloading. One may step aside only while another keeps going,
+     * so a download never ends up with nobody working on it.
+     */
+    class Crew(size: Int) {
+        private var alive = size
+
+        @Synchronized fun tryRetire(): Boolean = if (alive > 1) { alive--; true } else false
+
+        @Synchronized fun leave() { alive-- }
+
+        /** A resting connection tries again. */
+        @Synchronized fun rejoin() { alive++ }
+
+        @get:Synchronized val working: Int get() = alive
+    }
+
     companion object {
         const val PART = ".fdpart"
         private const val BUF = 64 * 1024
         private const val MIN_SPLIT = 1L shl 20 // 1 MB
         private const val RETRIES = 6
+        /** About 4 minutes for a busy server when only one connection is left. */
+        const val BUSY_RETRIES = 10
+        private const val BUSY_MAX_DELAY_MS = 30_000L
+        /** How long a refused connection rests before trying again. */
+        const val REJOIN_MS = 30_000L
+        private const val REJOIN_JITTER_MS = 10_000L
+        private const val REST_STEP_MS = 500L
+
+        /** Wait before asking a busy server again: its Retry-After (seconds) if it gave one, else 2, 4, 8… s; at most 30 s. */
+        fun busyDelayMs(attempt: Int, retryAfter: String?): Long {
+            val asked = retryAfter?.trim()?.toLongOrNull()?.takeIf { it >= 0 }?.times(1000)
+            val backoff = 2000L shl (attempt - 1).coerceIn(0, 10)
+            return minOf(asked ?: backoff, BUSY_MAX_DELAY_MS)
+        }
 
         /** Equal parts, but none smaller than 1 MB. */
         fun split(total: Long, connections: Int): List<Seg> {
