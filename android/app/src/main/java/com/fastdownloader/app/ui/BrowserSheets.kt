@@ -141,6 +141,7 @@ fun MenuSheet(
     onSettings: () -> Unit,
     onFind: () -> Unit,
     onReader: () -> Unit,
+    onWritingCheck: () -> Unit,
     onDesktop: () -> Unit,
     onTranslate: () -> Unit,
     onPrint: () -> Unit,
@@ -170,6 +171,7 @@ fun MenuSheet(
                 ZoomRow(tab)
                 SheetRow(Icons.Search, "Find in page", onClick = onFind)
                 SheetRow(Icons.Article, "Reader mode", "Just the article, in clean text", onClick = onReader)
+                SheetRow(Icons.Check, "Writing check", "Highlight stock AI-style phrases on this page", onClick = onWritingCheck)
                 SheetRow(Icons.Translate, "Translate page", "With Google Translate, into your phone's language", onClick = onTranslate)
                 SheetRow(Icons.Print, "Print / Save as PDF", onClick = onPrint)
                 SheetRow(

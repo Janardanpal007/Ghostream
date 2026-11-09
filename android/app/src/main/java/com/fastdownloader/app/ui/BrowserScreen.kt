@@ -80,6 +80,7 @@ import com.fastdownloader.app.engine.AdBlock
 import com.fastdownloader.app.engine.Engine
 import com.fastdownloader.app.engine.Filters
 import com.fastdownloader.app.engine.Links
+import com.fastdownloader.app.engine.WritingCheck
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -481,6 +482,19 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
                     Reader.extract(w) { doc ->
                         if (doc != null) reader = doc
                         else Toast.makeText(ctx, "No article found on this page", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onWritingCheck = {
+                    showMenu = false
+                    val w = tab.web ?: return@MenuSheet
+                    w.evaluateJavascript(WritingCheck.script()) { result ->
+                        val found = result?.toIntOrNull() ?: -1
+                        val message = when {
+                            found < 0 -> "Writing check couldn't run on this page"
+                            found == 0 -> "No stock AI phrases found"
+                            else -> "Highlighted $found stock AI phrase${if (found == 1) "" else "s"}"
+                        }
+                        Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show()
                     }
                 },
                 onDesktop = {
