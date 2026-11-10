@@ -88,8 +88,11 @@
       if (Math.abs(dx) > 7) dragMoved = true;
       if (dragMoved) { angle.value = String(Math.max(-30, Math.min(30, drag.start + dx / 3))); updateAngle(); }
     }, { passive: true });
-    window.addEventListener('pointerup', () => { drag = null; });
-    window.addEventListener('pointercancel', () => { drag = null; });
+    // Clear dragMoved after the click a drag may cause has been handled, so a drag that ends off the
+    // screen button doesn't swallow the next keyboard or click activation.
+    const endDrag = () => { drag = null; setTimeout(() => { dragMoved = false; }, 0); };
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
   }
 
   function setupDialog() {
