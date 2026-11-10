@@ -57,8 +57,9 @@ android {
             manifestPlaceholders["appLabel"] = "Ghostream"
             // Not minified: yt-dlp, FFmpeg and libtorrent are reached through JNI and reflection.
             isMinifyEnabled = false
+            // Without a release key the build stops (see the check below) rather than ship a debug-signed app.
             val release = signingConfigs.getByName("release")
-            signingConfig = if (release.storeFile != null) release else signingConfigs.getByName("debug")
+            if (release.storeFile != null) signingConfig = release
         }
     }
 
@@ -89,8 +90,25 @@ android {
     }
 
     // The ad and tracker list is shared with the browser extension (a copy sits in rules/ for the published source).
-    val sharedRules = rootDir.resolve("../extension/rules")
-    sourceSets["main"].assets.srcDir(if (sharedRules.exists()) sharedRules else rootDir.resolve("rules"))
+    // Without it the app's own blocking list would be silently left out, so the build stops instead.
+    val rulesDir = listOf(rootDir.resolve("../extension/rules"), rootDir.resolve("rules"))
+        .firstOrNull { it.resolve("trackers.json").isFile }
+        ?: throw GradleException("trackers.json not found: put it in android/rules/ (or ../extension/rules/).")
+    sourceSets["main"].assets.srcDir(rulesDir)
+}
+
+// A release APK or bundle needs the release key (FD_KEYSTORE* or keystore.properties); debug builds don't.
+gradle.taskGraph.whenReady {
+    val releaseTask = allTasks.any { t ->
+        t.project == project && t.name.endsWith("Release") &&
+            listOf("assemble", "bundle", "package").any { t.name.startsWith(it) }
+    }
+    if (releaseTask && android.signingConfigs.getByName("release").storeFile == null) {
+        throw GradleException(
+            "No release signing key: set FD_KEYSTORE, FD_KEYSTORE_PASSWORD, FD_KEY_ALIAS and FD_KEY_PASSWORD, " +
+                "or create android/keystore.properties (see android/README.md).",
+        )
+    }
 }
 
 dependencies {

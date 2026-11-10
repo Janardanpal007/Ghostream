@@ -69,7 +69,20 @@ class HttpTask(
                     (item.etag != null && p.etag != null && p.etag != item.etag) ||
                     (item.lastModified != null && p.lastModified != null && p.lastModified != item.lastModified) ||
                     !p.resumable)
-                if (changed || !part.exists()) reset()
+                if (changed && p != null) {
+                    // A different file now: start over with what the server says about it.
+                    reset()
+                    part.delete()
+                    synchronized(item) {
+                        item.total = p.size
+                        item.resumable = p.resumable
+                        item.etag = p.etag
+                        item.lastModified = p.lastModified
+                    }
+                    if (!item.resumable || item.total <= 0) return single(part)
+                } else if (!part.exists()) {
+                    reset()
+                }
             }
             synchronized(item) {
                 if (item.segments.isEmpty()) item.segments.addAll(split(item.total, connections))

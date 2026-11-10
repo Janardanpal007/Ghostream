@@ -1,104 +1,90 @@
 # Ghostream for Android
 
-The Android version of Ghostream. It runs on **Android 8.0 (API 26) through Android 17 (API 37)**, and looks and works like the desktop app.
+Ghostream for **Android 8.0 (API 26) through Android 17 (API 37)**: fast file downloads, video sites, torrents and a built-in browser with ad blocking.
 
 ## What it does
 
-- **Fast file downloads**: each file downloads in up to 32 parts at once, using HTTP Range requests. When a part finishes early, its connection takes over half of the largest part still left.
-- **Pause and resume**: progress is saved every two seconds, so a download continues after closing the app, restarting the phone or losing the connection. A download that failed because the network dropped starts again by itself when the connection comes back.
-- **Queue**: a set number of downloads run at once and the rest wait their turn. Each shows its progress, speed and time left. Downloads keep running in the background, with a notification and a "Pause all" button.
-- **Sorted folders**: files are saved in `Download/FastDownloader/`, in ZIP, DOC, Programs, Videos, Music, Torrent, Images and Other folders.
-- **Video sites**: YouTube and 1,000+ other sites, through yt-dlp. You pick the quality (up to 8K), MP4 or MKV, or audio only as M4A or MP3. HLS and DASH streams work too.
-- **Torrents**: magnet links and .torrent files (libtorrent), with optional extra public trackers.
-- **Built-in browser** (opens YouTube):
-  - puts a **Download** button on every video playing on a page, and counts the videos it finds;
-  - lists the video and audio files a page loads, and catches download links;
-  - blocks ads and trackers with **uBlock Origin's filter lists** (uBlock filters, EasyList, EasyPrivacy, Peter Lowe's list): blocked requests, hidden ad boxes and blocked pop-ups. The lists update every few days, and the shield button turns blocking off for one site;
-  - signing in to a site there lets you download that site's videos that need an account.
-- **Getting links in**:
-  - tap **Share** on a link in any app and pick Ghostream;
-  - select text and choose Ghostream in the text menu;
-  - open magnet links or .torrent files;
-  - copy a link: Ghostream offers to download it when you switch to it.
-- **Privacy**:
-  - an HTTP or SOCKS5 proxy for everything, with DNS through the proxy too and no fallback to your real address;
-  - a "Check my IP" button;
-  - Do Not Track and Global Privacy Control signals;
-  - tracking tags removed from links;
-  - a kill switch that runs torrents only while a VPN is on;
-  - history options.
-- **Other settings**: a speed limit and a Wi-Fi-only mode.
+- **Fast file downloads** in parallel parts (HTTP Range requests). When a part finishes early, its connection takes over half of the largest part still left.
+- **Pause and resume**: a download continues after closing the app, restarting the phone or losing the connection. If the file on the server changed, it starts over instead of mixing old and new data.
+- **Queue** with background downloads, a notification and a "Pause all" button.
+- **Sorted folders**: files are saved in `Download/Ghostream/`, in ZIP, DOC, Programs, Videos, Music, Torrent, Images and Other folders (sorting can be turned off). If that folder can't be written, the app's own `Android/data/…/files/Download/Ghostream/` is used.
+- **Video sites** through yt-dlp (MP4, MKV, or audio only as M4A or MP3), **torrents** through libtorrent, and a **browser** that finds videos on a page and blocks ads and trackers with uBlock Origin's lists, EasyList, EasyPrivacy, Peter Lowe's list and Ghostream's own list (`rules/trackers.json`).
+- **Privacy**: HTTP or SOCKS5 proxy, Do Not Track / Global Privacy Control, tracking tags removed from links, and a kill switch that runs torrents only while a VPN is on.
 
-## Installing on a phone
+### Free and Ghostream Turbo
 
-1. Download the APK that fits your phone from the [Releases page](https://github.com/Janardanpal007/FastDownloader-Download/releases/latest):
+| | Free | Turbo |
+|---|---|---|
+| Parts per file | up to 8 | up to 32 |
+| Downloads at once | up to 3 | up to 10 |
+| Torrent connections | up to 200 | up to 1000 |
+| Video quality | up to 1080p | 2K, 4K and 8K where the site has them |
+| Adding links | from the Browser tab | paste or share any link |
 
-   | File | For |
-   |---|---|
-   | `Ghostream-<version>-android-arm64.apk` | Almost every phone from 2017 on (pick this if unsure) |
-   | `Ghostream-<version>-android-arm.apk` | Older 32-bit phones |
-   | `Ghostream-<version>-android-x86_64.apk` | Chromebooks and emulators |
-   | `Ghostream-<version>-android-universal.apk` | Any device (bigger download) |
+Turbo is unlocked with a key; see the [Turbo page](https://janardanpal007.github.io/Ghostream/#turbo).
 
-2. Open the downloaded file. Android asks to allow installing from your browser or file manager the first time: tap **Settings**, turn on **Allow from this source**, go back and tap **Install**.
-3. Open Ghostream and allow notifications, so you can see downloads in the background.
+## Installing
 
-Android 8 to 10 ask once for storage permission, the first time you download. Android 11 and newer don't need it.
+Download an APK from the [Releases page](https://github.com/Janardanpal007/Ghostream/releases/latest):
+
+| File | For |
+|---|---|
+| `Ghostream-<version>-android-arm64.apk` | Almost every phone from 2017 on (smaller download) |
+| `Ghostream-<version>-android-universal.apk` | Any device, including 32-bit phones, Chromebooks and emulators |
+
+Open it and allow installing from your browser or file manager when Android asks. Allow notifications so downloads show in the background. Android 8 to 10 ask once for storage permission.
 
 ## Building from source
 
-You need JDK 17 or newer, and the Android SDK with platform 37.0 and build-tools 37 (Android Studio installs these for you).
+You need JDK 17 or newer and the Android SDK with platform 37 (Android Studio installs it). The app's version is `fdVersion` in `android/gradle.properties`.
+
+`android/rules/trackers.json` (Ghostream's own ad and tracker list) is required: the build stops if neither `android/rules/` nor `../extension/rules/` contains it.
 
 ```bash
 cd android
-./gradlew assembleDebug          # debug build: app/build/outputs/apk/debug/
-./gradlew assembleRelease        # release build, signed if keystore.properties exists
-npm run dist:android             # from the project root: release build copied to dist/Android/
+./gradlew assembleDebug     # app/build/outputs/apk/debug/
+./gradlew assembleRelease   # app/build/outputs/apk/release/ (needs the release key, see below)
 ```
 
-The app's version is read from the root `package.json`, so every platform shares one version number.
+Each build makes two APKs: `app-arm64-v8a-<type>.apk` and `app-universal-<type>.apk`. Debug builds install beside the release app (`com.ghostream.app.debug`).
 
 ### Release signing
 
-Release APKs must always be signed with the same key, or phones refuse to install an update over the old version. The key is kept **outside** the project, and `android/keystore.properties` (ignored by git) points to it:
+A release build stops with an error unless a release key is set; it is never signed with the debug key. Updates must always be signed with the same key, so keep it **outside** the project and back up the `.jks` file and its passwords.
+
+Either set environment variables:
+
+```bash
+export FD_KEYSTORE=/path/to/ghostream-release.jks
+export FD_KEYSTORE_PASSWORD=...
+export FD_KEY_ALIAS=...
+export FD_KEY_PASSWORD=...
+```
+
+or create `android/keystore.properties` (ignored by git); an environment variable wins over the file:
 
 ```properties
-storeFile=C:/Users/you/.fastdownloader/android-release.jks
+storeFile=/path/to/ghostream-release.jks
 storePassword=...
-keyAlias=fastdownloader
+keyAlias=...
 keyPassword=...
 ```
 
-On GitHub Actions the same values come from the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. **Back up the .jks file and its password.** If they're lost, future versions can't update existing installs.
+## Where things are
 
-## How it's built
+Under `app/src/main/java/com/fastdownloader/app/`:
 
 | Part | Where |
 |---|---|
-| Download queue, saving and network rules | `app/src/main/java/com/fastdownloader/app/engine/Engine.kt` |
+| Download queue, saving, folders | `engine/Engine.kt` |
 | Segmented HTTP downloads | `engine/HttpTask.kt` |
 | Torrents (libtorrent4j) | `engine/TorrentTask.kt` |
-| Video sites (youtubedl-android: yt-dlp, Python, FFmpeg, QuickJS) | `engine/VideoTask.kt` |
+| Video sites (youtubedl-android) | `engine/VideoTask.kt` |
+| Ad and tracker blocking | `engine/Filters.kt`, `engine/AdBlock.kt` |
+| Turbo limits and keys | `engine/Turbo.kt` |
 | HTTP client, proxy, privacy headers | `engine/Net.kt` |
-| Categories, link checks, tracking-tag removal | `engine/Links.kt` |
-| Background service and notification | `service/DownloadService.kt` |
 | Screens (Jetpack Compose) | `ui/` |
-
-## Tested on
-
-- **Android 16** (API 36) emulator:
-  - a 756 MB file downloaded in 8 parts, was paused, force-stopped and resumed, and its SHA-256 matched Debian's official value;
-  - a YouTube video downloaded (video and audio joined);
-  - a magnet link downloaded with libtorrent;
-  - the Browser and Settings screens work.
-- **Android 8.0** (API 26) emulator:
-  - the release build installed and opened;
-  - storage permission was asked once;
-  - category folders were created;
-  - a 64 MB download's SHA-256 matched Debian's official value;
-  - YouTube listed qualities up to 4K.
-- **Android 17** (API 37): the app is built for it (`targetSdk 37`) and installs. The Android 17 emulator image crashes in its own graphics service on the test PC, so the app hasn't been run on Android 17 yet. Please try it on an Android 17 phone.
 
 ## Licence
 
-Ghostream for Android is free software under the **GNU General Public License v3** ([LICENSE](LICENSE)), because it includes [youtubedl-android](https://github.com/yausername/youtubedl-android) (GPL-3.0). Third-party components and their licences are listed in [NOTICE.md](NOTICE.md). The desktop apps and the browser extension are separate programs and aren't covered by this licence.
+GNU General Public License v3 ([LICENSE](LICENSE)), because it includes [youtubedl-android](https://github.com/yausername/youtubedl-android) (GPL-3.0). Third-party components are listed in [NOTICE.md](NOTICE.md).
