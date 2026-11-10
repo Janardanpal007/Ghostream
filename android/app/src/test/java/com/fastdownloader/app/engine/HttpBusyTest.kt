@@ -64,6 +64,21 @@ class HttpBusyTest {
     }
 
     @Test
+    fun `the last connection keeps waiting while others rest, until nothing arrives for too long`() {
+        var clock = 0L
+        val crew = HttpTask.Crew(2) { clock }
+        assertFalse(crew.othersMayReturn()) // nobody resting: the last one may give up
+        assertTrue(crew.tryRetire())
+        assertTrue(crew.othersMayReturn())
+        clock = HttpTask.STALL_MS
+        assertFalse(crew.othersMayReturn()) // stuck for too long: fail
+        crew.progressed()
+        assertTrue(crew.othersMayReturn())
+        crew.rejoin()
+        assertFalse(crew.othersMayReturn())
+    }
+
+    @Test
     fun `busy wait follows the server's Retry-After, capped at 30 seconds`() {
         assertEquals(5_000L, HttpTask.busyDelayMs(1, "5"))
         assertEquals(30_000L, HttpTask.busyDelayMs(1, "120"))

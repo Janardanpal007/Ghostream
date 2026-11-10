@@ -213,6 +213,7 @@ class HttpTask(
                             }
                             attempt = 0
                             busyAttempt = 0
+                            crew.progressed()
                             throttle.take(write)
                             if (write < n) break
                         }
@@ -226,8 +227,9 @@ class HttpTask(
                 if (stopped) return true
                 // The site allows fewer connections than we opened: this one steps aside, the rest carry on.
                 if (crew.tryRetire()) return false
-                // The last connection waits for the site instead of failing the download.
-                if (++busyAttempt > BUSY_RETRIES) throw FatalError(Net.httpError(e.code))
+                // The last connection waits for the site instead of failing the download. It gives up only
+                // when no resting connection can come back, or nothing has arrived for a long time.
+                if (++busyAttempt > BUSY_RETRIES && !crew.othersMayReturn()) throw FatalError(Net.httpError(e.code))
                 Thread.sleep(busyDelayMs(busyAttempt, e.retryAfter))
             } catch (e: IOException) {
                 if (stopped) return true
@@ -299,15 +301,26 @@ class HttpTask(
      * How many connections are still downloading. One may step aside only while another keeps going,
      * so a download never ends up with nobody working on it.
      */
-    class Crew(size: Int) {
+    class Crew(size: Int, private val now: () -> Long = System::currentTimeMillis) {
         private var alive = size
+        private var resting = 0
+        @Volatile private var lastProgress = now()
 
-        @Synchronized fun tryRetire(): Boolean = if (alive > 1) { alive--; true } else false
+        @Synchronized fun tryRetire(): Boolean = if (alive > 1) { alive--; resting++; true } else false
 
         @Synchronized fun leave() { alive-- }
 
         /** A resting connection tries again. */
-        @Synchronized fun rejoin() { alive++ }
+        @Synchronized fun rejoin() { resting--; alive++ }
+
+        /** Some data arrived. */
+        fun progressed() { lastProgress = now() }
+
+        /**
+         * The last connection may keep waiting for a busy server while others are only resting and will try
+         * again, but not forever: once nothing has arrived for [STALL_MS] the download fails.
+         */
+        @Synchronized fun othersMayReturn(): Boolean = resting > 0 && now() - lastProgress < STALL_MS
 
         @get:Synchronized val working: Int get() = alive
     }
@@ -317,8 +330,10 @@ class HttpTask(
         private const val BUF = 64 * 1024
         private const val MIN_SPLIT = 1L shl 20 // 1 MB
         private const val RETRIES = 6
-        /** About 4 minutes for a busy server when only one connection is left. */
+        /** About 4 minutes for a busy server when only one connection is left and none are resting. */
         const val BUSY_RETRIES = 10
+        /** While other connections rest, the last one keeps waiting until nothing has arrived for this long. */
+        const val STALL_MS = 15 * 60_000L
         private const val BUSY_MAX_DELAY_MS = 30_000L
         /** How long a refused connection rests before trying again. */
         const val REJOIN_MS = 30_000L
