@@ -74,7 +74,7 @@ private fun until(r: Turbo.Result.Valid) = if (r.lifetime) "lifetime" else "unti
 private fun grouped(key: String) = if (key.length == Turbo.KEY_LENGTH) key.substring(0, 5) + "-" + key.substring(5) else key
 
 private val PERKS = listOf(
-    "Paste any link" to "Paste or share a link from any app; free downloads start in the Browser tab",
+    "Paste any link" to "Paste or share a link from any app; free downloads start in the Browser tab, or from a magnet link or .torrent file",
     "YouTube in 2K, 4K and Highest" to "Free plays up to 1080p",
     "Video downloads above 1080p" to "2K, 4K and 8K where the site has them",
     "Up to 32 parts per file" to "Free: ${Turbo.FREE_PARTS} parts",

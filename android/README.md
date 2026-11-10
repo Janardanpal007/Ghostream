@@ -19,7 +19,7 @@ Ghostream for **Android 8.0 (API 26) through Android 17 (API 37)**: fast file do
 | Downloads at once | up to 3 | up to 10 |
 | Torrent connections | up to 200 | up to 1000 |
 | Video quality | up to 1080p | 2K, 4K and 8K where the site has them |
-| Adding links | from the Browser tab | paste or share any link |
+| Adding links | from the Browser tab, plus magnet links and `.torrent` files from any app | paste or share any link |
 
 Turbo is unlocked with a key; see the [Turbo page](https://janardanpal007.github.io/Ghostream/#turbo).
 

@@ -52,7 +52,8 @@ import java.io.File
 /**
  * What the Add panel opens with: a link, plus the browser's headers when it came from the Browser tab.
  * [fromBrowser]: the browser stays on screen afterwards, with the download sheet. [quick]: a plain file
- * starts downloading without waiting for the Download button.
+ * starts downloading without waiting for the Download button. [torrent]: a magnet link or .torrent file
+ * opened or shared from another app; adding it is free, like a magnet link in the Browser tab.
  */
 data class AddRequest(
     val url: String,
@@ -60,6 +61,7 @@ data class AddRequest(
     val auto: Boolean = true,
     val fromBrowser: Boolean = false,
     val quick: Boolean = false,
+    val torrent: Boolean = false,
 )
 
 enum class Tab { BROWSER, DOWNLOADS, SETTINGS }
@@ -158,7 +160,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         val link = if (text != null && text.startsWith("/")) ownTorrentFile(text) else Links.firstLink(text)
         if (link != null) {
             tab = Tab.DOWNLOADS
-            addRequest = AddRequest(link)
+            addRequest = AddRequest(link, torrent = Links.isMagnet(link) || link.startsWith("/"))
         }
         setIntent(Intent())
     }
