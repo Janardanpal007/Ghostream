@@ -79,8 +79,6 @@ object Updater {
     /** Returns the newer release, or null when this version is the newest. Runs network calls: call off the main thread. */
     fun check(): Release? {
         _state.value = _state.value.copy(checking = true, error = null)
-        // Turbo's key list; a failed download keeps the saved one.
-        if (Engine.settings.turboHash.isNotEmpty()) Turbo.refreshList()
         try {
             val rel = Json.parseToJsonElement(fetch(RELEASES_API, "application/vnd.github+json")).jsonObject
             val tag = rel["tag_name"]?.jsonPrimitive?.content.orEmpty()

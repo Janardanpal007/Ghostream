@@ -127,7 +127,7 @@ data class Settings(
     val turboKey: String = "",
     /** Its one-way hash, as listed on the website; what [Turbo.current] checks. */
     val turboHash: String = "",
-    /** The website's turbo-keys.txt, saved at activation and refreshed with the update check (works offline). */
+    /** The website's turbo-keys.txt, saved at activation and refreshed once a day (works offline). */
     val turboList: List<String> = emptyList(),
 ) {
     val proxyOn get() = proxyType != "none" && proxyHost.isNotBlank() && proxyPort in 1..65535
