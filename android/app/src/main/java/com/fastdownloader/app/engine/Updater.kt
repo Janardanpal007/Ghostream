@@ -119,6 +119,8 @@ object Updater {
         val out = File(dir, rel.apkName!!)
         _state.value = _state.value.copy(progress = 0f, ready = null, error = null)
         try {
+            // Without a published checksum the download can't be verified, so don't fetch or install it.
+            val expected = rel.sha256 ?: error("This release has no checksum for the app, so it can't be checked. Update from the release page instead.")
             val md = MessageDigest.getInstance("SHA-256")
             Net.client().newCall(Net.request(url, emptyMap())).execute().use { r ->
                 if (!r.isSuccessful) error("HTTP ${r.code}")
@@ -143,7 +145,7 @@ object Updater {
                 }
             }
             val actual = md.digest().joinToString("") { "%02x".format(it) }
-            if (rel.sha256 != null && actual != rel.sha256) {
+            if (actual != expected) {
                 out.delete()
                 error("The download doesn't match the published checksum, so it was deleted. Try again.")
             }
