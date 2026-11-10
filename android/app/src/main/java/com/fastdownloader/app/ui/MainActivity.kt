@@ -154,12 +154,20 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             else -> null
         }
         intent.getStringExtra(EXTRA_OPEN_ID)?.let { tab = Tab.DOWNLOADS }
-        val link = if (text != null && text.startsWith("/")) text else Links.firstLink(text)
+        // A local path is only ever one of our own saved .torrent copies (viewData); any other path is ignored.
+        val link = if (text != null && text.startsWith("/")) ownTorrentFile(text) else Links.firstLink(text)
         if (link != null) {
             tab = Tab.DOWNLOADS
             addRequest = AddRequest(link)
         }
         setIntent(Intent())
+    }
+
+    /** [path] as a canonical path when it's a .torrent inside the app's own torrents folder, else null. */
+    private fun ownTorrentFile(path: String): String? {
+        val dir = runCatching { File(filesDir, "torrents").canonicalPath }.getOrNull() ?: return null
+        val file = runCatching { File(path).canonicalPath }.getOrNull() ?: return null
+        return file.takeIf { it.startsWith(dir + File.separator) && it.endsWith(".torrent") }
     }
 
     private fun viewData(uri: Uri, type: String?): String? {
