@@ -233,11 +233,16 @@ object Engine {
 
     private fun itemIds(): List<String> = synchronized(this) { items.map { it.id } }
 
+    /** Serialises settings changes: the UI, Turbo and the key-list refresh call updateSettings from different threads. */
+    private val settingsLock = Any()
+
     fun updateSettings(change: (Settings) -> Settings) {
-        val next = change(settings)
-        _settings.value = next
-        store.saveSettings(next)
-        applySettings(next)
+        synchronized(settingsLock) {
+            val next = change(settings)
+            _settings.value = next
+            store.saveSettings(next)
+            applySettings(next)
+        }
         enforceNetworkRules()
         schedule()
     }
