@@ -2,6 +2,7 @@ package com.fastdownloader.app.browser
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.util.Log
 import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
@@ -34,6 +35,7 @@ import com.fastdownloader.app.engine.Engine
 import com.fastdownloader.app.engine.Filters
 import com.fastdownloader.app.engine.Links
 import com.fastdownloader.app.engine.Net
+import com.fastdownloader.app.engine.Redirects
 import com.fastdownloader.app.engine.Turbo
 import com.fastdownloader.app.ui.AddRequest
 import kotlinx.serialization.json.Json
@@ -74,15 +76,34 @@ private val httpsFailed = java.util.Collections.synchronizedSet(HashSet<String>(
  * makes blocked requests fail; WebView can't, and an empty 200 reply or a cross-origin error breaks
  * sites like YouTube that expect their tracking calls to just fail quietly.
  */
-private fun blockedResponse(req: WebResourceRequest, pageUrl: String): WebResourceResponse {
+private fun blockedResponse(req: WebResourceRequest, pageUrl: String): WebResourceResponse =
+    WebResourceResponse("text/plain", "utf-8", 204, "No Content", corsHeaders(req, pageUrl), ByteArrayInputStream(ByteArray(0)))
+
+private fun corsHeaders(req: WebResourceRequest, pageUrl: String): Map<String, String> {
     val origin = req.requestHeaders["Origin"] ?: req.requestHeaders["origin"]
         ?: pageUrl.substringBefore("://", "").let { scheme -> if (scheme.isEmpty()) "*" else "$scheme://" + (AdBlock.hostOf(pageUrl) ?: "") }
-    val headers = mapOf(
+    return mapOf(
         "Access-Control-Allow-Origin" to origin,
         "Access-Control-Allow-Credentials" to "true",
         "Cache-Control" to "no-store",
     )
-    return WebResourceResponse("text/plain", "utf-8", 204, "No Content", headers, ByteArrayInputStream(ByteArray(0)))
+}
+
+private val redirectBytes = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+
+/**
+ * A blocked request whose rule names a stand-in ($redirect=): answer with it, so pages that check their ad
+ * script loaded keep working. Null when there is no stand-in; then the request is just blocked.
+ */
+private fun redirectResponse(ctx: Context, name: String, req: WebResourceRequest, pageUrl: String): WebResourceResponse? {
+    if (name.isEmpty()) return null
+    val r = Redirects.find(name) ?: return null
+    val bytes = r.bytes ?: r.asset?.let { file ->
+        redirectBytes[file] ?: runCatching { ctx.assets.open("redirects/$file").use { it.readBytes() } }
+            .onFailure { Log.w("TabWebView", "stand-in $file missing", it) }
+            .getOrNull()?.also { redirectBytes[file] = it }
+    } ?: return null
+    return WebResourceResponse(r.mime, "utf-8", 200, "OK", corsHeaders(req, pageUrl), ByteArrayInputStream(bytes))
 }
 
 /** Resource type for filter rules like $script or $image. WebView doesn't say, so it's worked out. */
@@ -208,6 +229,10 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
     @JavascriptInterface
     fun cosmeticBase(url: String): String =
         if (state.blocking()) Filters.engine?.cosmeticBase(url) ?: "" else ""
+
+    @JavascriptInterface
+    fun proceduralFor(url: String): String =
+        if (state.blocking()) Filters.engine?.proceduralFor(url) ?: "[]" else "[]"
 
     @JavascriptInterface
     fun cosmeticFor(url: String, idsAndClasses: String): String =
@@ -337,9 +362,10 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             val s2 = request.url.toString()
             if (!request.isForMainFrame && state.blocking()) {
                 val engine = Filters.engine
-                if (engine != null && engine.shouldBlock(s2, state.topUrl, typeOf(request))) {
+                val verdict = engine?.blockOrRedirect(s2, state.topUrl, typeOf(request))
+                if (verdict != null) {
                     view.post { blocked++; BrowserStore.countBlocked() }
-                    return blockedResponse(request, state.topUrl)
+                    return redirectResponse(view.context, verdict, request, state.topUrl) ?: blockedResponse(request, state.topUrl)
                 }
             }
             MEDIA.find(s2)?.let { m ->

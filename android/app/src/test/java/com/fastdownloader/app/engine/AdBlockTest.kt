@@ -3,6 +3,7 @@ package com.fastdownloader.app.engine
 import com.fastdownloader.app.engine.AdBlock.Type
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -58,6 +59,73 @@ class AdBlockTest {
         assertTrue(a.shouldBlock("https://ads.example/x", page, Type.SCRIPT))
         assertFalse(a.shouldBlock("https://ads.example/allowed/x", page, Type.SCRIPT))
         assertTrue(a.shouldBlock("https://strong.test/x", page, Type.SCRIPT))
+    }
+
+    @Test
+    fun badfilterSwitchesOffTheRuleItNamesAcrossLists() {
+        val a = AdBlock.parse(
+            listOf(
+                "||ads.example^\n||cdn.test/ad.js\$script,domain=example.com\n||kept.test^",
+                "||ads.example^\$badfilter\n||cdn.test/ad.js\$script,domain=example.com,badfilter",
+            ),
+        )
+        assertFalse(a.shouldBlock("https://ads.example/x", page, Type.SCRIPT))
+        assertFalse(a.shouldBlock("https://cdn.test/ad.js", page, Type.SCRIPT))
+        assertTrue(a.shouldBlock("https://kept.test/x", page, Type.SCRIPT))
+        assertEquals(1, a.networkRules)
+    }
+
+    @Test
+    fun redirectRulesServeAStandInInsteadOfBlocking() {
+        val a = ab(
+            "||ads.test/ad.js\$script,redirect=noop.js",
+            "||imasdk.googleapis.com/js/sdkloader/ima3.js\$script,redirect=google-ima.js:5",
+            "||plain.test^",
+            "||plain.test/gpt.js\$script,redirect-rule=googletagservices_gpt.js",
+            "||only-rule.test/x.js\$redirect-rule=noop.js",
+            "||safe.test^",
+            "@@||safe.test^\$redirect=noop.js",
+        )
+        assertEquals("noop.js", a.blockOrRedirect("https://ads.test/ad.js", page, Type.SCRIPT))
+        assertEquals("google-ima.js", a.blockOrRedirect("https://imasdk.googleapis.com/js/sdkloader/ima3.js", page, Type.SCRIPT))
+        assertEquals("googletagservices_gpt.js", a.blockOrRedirect("https://plain.test/gpt.js", page, Type.SCRIPT))
+        assertEquals("", a.blockOrRedirect("https://plain.test/other.js", page, Type.SCRIPT))
+        // A $redirect-rule only changes how an already blocked request is answered; it doesn't block on its own.
+        assertNull(a.blockOrRedirect("https://only-rule.test/x.js", page, Type.SCRIPT))
+        // A redirect exception must not turn into a plain allow rule.
+        assertTrue(a.shouldBlock("https://safe.test/x", page, Type.SCRIPT))
+        assertNull(a.blockOrRedirect("https://example.org/app.js", page, Type.SCRIPT))
+    }
+
+    @Test
+    fun redirectNamesAndAliasesFindAStandIn() {
+        assertEquals("application/javascript", Redirects.find("noopjs")?.mime)
+        assertEquals("google-ima.js", Redirects.find("google-ima.js")?.asset)
+        assertEquals("anti-adblock.js", Redirects.find("nofab.js")?.asset)
+        assertEquals("image/gif", Redirects.find("1x1.gif")?.mime)
+        assertNull(Redirects.find("noop-1s.mp4")) // no stand-in: the request is simply blocked
+        // Every asset a resource names must ship with the app.
+        val names = listOf("google-ima.js", "googletagservices_gpt.js", "googlesyndication_adsbygoogle.js", "google-analytics.js", "anti-adblock.js")
+        names.forEach { assertTrue(it, File("src/main/assets/redirects/$it").isFile) }
+    }
+
+    @Test
+    fun proceduralRulesAreServedPerSiteAndNotAsCss() {
+        val a = ab(
+            "example.com##div.card:has-text(Sponsored)",
+            "example.com#?#div:-abp-contains(Promoted)",
+            "example.com##.x:upward(2):remove()",
+            "example.com#@#.x:upward(2):remove()",
+            "##div:has-text(ad)", // generic procedural rules are too slow to run everywhere: dropped
+            "other.org##p.promo:style(color: red !important)",
+            "other.org##p:style(background: url(https://x.test/a.png))", // can load things: dropped
+            "other.org##div:others()", // not supported: dropped
+        )
+        assertEquals("""["div.card:has-text(Sponsored)","div:-abp-contains(Promoted)"]""", a.proceduralFor("https://www.example.com/"))
+        assertEquals("", a.cosmeticBase("https://www.example.com/"))
+        assertEquals("""["p.promo:style(color: red !important)"]""", a.proceduralFor("https://other.org/"))
+        assertEquals("[]", a.proceduralFor("https://unrelated.net/"))
+        assertEquals("[]", ab("@@||example.com^\$elemhide", "example.com##div:has-text(x)").proceduralFor("https://example.com/"))
     }
 
     @Test

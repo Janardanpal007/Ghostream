@@ -11,8 +11,12 @@ package com.fastdownloader.app.engine
  *   element hiding  ##.ad  example.com##.banner  example.*##.ad  #@# exceptions, and the :has() / :not() CSS
  *   hosts files     0.0.0.0 ads.example.com
  *   scriptlets      example.com##+js(set, ads.enabled, false)  #@#+js(…) exceptions; run by assets/scriptlets.js
- * Rules needing more of uBlock's own runtime (procedural :has-text() etc., $removeparam, $csp,
- * $redirect-rule, regex patterns) are skipped, so nothing half-works.
+ *   $badfilter      "rule$badfilter" in any list switches that rule off
+ *   $redirect=      blocked requests answered with a harmless stand-in ($redirect-rule= only for already blocked ones)
+ *   procedural      example.com##div:has-text(Sponsored):upward(2)  :remove() :style() :matches-css() :xpath()…
+ *                   (site-specific only; run by assets/page.js)
+ * Rules needing more of uBlock's own runtime ($removeparam, $csp, regex patterns, :others(), HTML filters)
+ * are skipped, so nothing half-works.
  *
  * Plain Kotlin (no Android classes), so it can be unit-tested on the PC.
  */
@@ -32,6 +36,7 @@ class AdBlock private constructor() {
         val domains: Array<String>?,
         val notDomains: Array<String>?,
         val important: Boolean,
+        val redirect: String? = null, // stand-in resource name from $redirect= / $redirect-rule=
     ) {
         private var compiled: Regex? = null
         private val pureHost = pattern.isEmpty() // matched by host index alone
@@ -60,6 +65,10 @@ class AdBlock private constructor() {
     private val blockTokens = HashMap<String, MutableList<NetRule>>()
     private val allowTokens = HashMap<String, MutableList<NetRule>>()
 
+    // $redirect / $redirect-rule: what to answer a blocked request with, instead of nothing.
+    private val redirectHosts = HashMap<String, MutableList<NetRule>>()
+    private val redirectTokens = HashMap<String, MutableList<NetRule>>()
+
     // Whole-page exceptions (@@…$document, $elemhide, $generichide).
     private val docAllow = mutableListOf<Pair<NetRule, Int>>()
 
@@ -69,6 +78,10 @@ class AdBlock private constructor() {
     private val genericAllow = HashSet<String>()
     private val specific = HashMap<String, MutableList<String>>() // host or "name.*" → selectors
     private val specificAllow = HashMap<String, MutableSet<String>>()
+
+    // Procedural element hiding (":has-text()", ":upward()", ":remove()"…), run by assets/page.js. Site-specific only.
+    private val procedural = HashMap<String, MutableList<String>>()
+    private val proceduralAllow = HashMap<String, MutableSet<String>>()
 
     // Scriptlets: host or "name.*" → scriptlets for it; exceptions by host ("" = everywhere).
     private class Scriptlet(val key: String, val args: List<String>, val notDomains: List<String>)
@@ -85,15 +98,21 @@ class AdBlock private constructor() {
     // ---------------- matching ----------------
 
     /** True if the request should be blocked. [pageUrl] is the page the request comes from. */
-    fun shouldBlock(url: String, pageUrl: String, type: Type): Boolean {
+    fun shouldBlock(url: String, pageUrl: String, type: Type): Boolean = blockOrRedirect(url, pageUrl, type) != null
+
+    /**
+     * null: let the request through. "": block it. Anything else: block it and answer with that stand-in
+     * resource instead (see [Redirects]), so pages that check their ad script loaded keep working.
+     */
+    fun blockOrRedirect(url: String, pageUrl: String, type: Type): String? {
         val u = url.lowercase()
-        val host = hostOf(u) ?: return false
+        val host = hostOf(u) ?: return null
         val pageHost = hostOf(pageUrl.lowercase()) ?: host
-        if (pageFlags(pageUrl) and FLAG_DOCUMENT != 0) return false
+        if (pageFlags(pageUrl) and FLAG_DOCUMENT != 0) return null
         val third = baseDomain(host) != baseDomain(pageHost)
-        val block = find(blockHosts, blockTokens, u, host, type, third, pageHost) ?: return false
-        if (block.important) return true
-        return find(allowHosts, allowTokens, u, host, type, third, pageHost) == null
+        val block = find(blockHosts, blockTokens, u, host, type, third, pageHost) ?: return null
+        if (!block.important && find(allowHosts, allowTokens, u, host, type, third, pageHost) != null) return null
+        return block.redirect ?: find(redirectHosts, redirectTokens, u, host, type, third, pageHost)?.redirect ?: ""
     }
 
     private fun find(
@@ -160,6 +179,20 @@ class AdBlock private constructor() {
             genericByToken[t]?.forEach { if (it !in allowed && it !in genericAllow) out.add(it) }
         }
         return out.joinToString("\n")
+    }
+
+    /** The procedural hiding rules for a page, as a JSON array of selector strings for assets/page.js. */
+    fun proceduralFor(pageUrl: String): String {
+        if (pageFlags(pageUrl) and (FLAG_DOCUMENT or FLAG_ELEMHIDE) != 0) return "[]"
+        val host = hostOf(pageUrl.lowercase()) ?: return "[]"
+        val out = LinkedHashSet<String>()
+        val allowed = HashSet<String>()
+        for (key in specificKeys(host)) {
+            procedural[key]?.let { out.addAll(it) }
+            proceduralAllow[key]?.let { allowed.addAll(it) }
+        }
+        out.removeAll(allowed)
+        return out.joinToString(",", "[", "]") { jsonString(it) }
     }
 
     /**
@@ -255,10 +288,14 @@ class AdBlock private constructor() {
         if (line.startsWith("#@#", i) && !line.startsWith("#@#+", i) && !line.startsWith("#@#^", i)) {
             return Triple(line.substring(0, i), line.substring(i + 3), true)
         }
+        // Adblock Plus's marker for procedural rules ("example.com#?#div:-abp-contains(Ad)").
+        if (line.startsWith("#?#", i)) return Triple(line.substring(0, i), line.substring(i + 3), false)
+        if (line.startsWith("#@?#", i)) return Triple(line.substring(0, i), line.substring(i + 4), true)
         return null
     }
 
     private fun addCosmetic(domainsPart: String, selector: String, exception: Boolean) {
+        if (PROCEDURAL.containsMatchIn(selector)) { addProcedural(domainsPart, selector.trim(), exception); return }
         if (selector.isEmpty() || UNSUPPORTED_CSS.containsMatchIn(selector)) return
         val sel = selector.trim()
         val domains = domainsPart.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
@@ -278,6 +315,23 @@ class AdBlock private constructor() {
             positive.forEach { specific.getOrPut(it) { ArrayList(2) } += sel }
             domains.filter { it.startsWith('~') }.forEach { specificAllow.getOrPut(it.substring(1)) { HashSet() } += sel }
         }
+    }
+
+    /** Site-specific procedural rule; generic ones (no site) would run on every page and are dropped, as uBlock does. */
+    private fun addProcedural(domainsPart: String, sel: String, exception: Boolean) {
+        if (PROCEDURAL_NOT_YET.containsMatchIn(sel)) return
+        val style = sel.indexOf(":style(")
+        if (style >= 0 && UNSAFE_STYLE.containsMatchIn(sel.substring(style))) return
+        val domains = domainsPart.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        val positive = domains.filter { !it.startsWith('~') }
+        if (exception) {
+            positive.forEach { proceduralAllow.getOrPut(it) { HashSet() } += sel }
+            return
+        }
+        if (positive.isEmpty()) return
+        cosmeticRules++
+        positive.forEach { procedural.getOrPut(it) { ArrayList(1) } += sel }
+        domains.filter { it.startsWith('~') }.forEach { proceduralAllow.getOrPut(it.substring(1)) { HashSet() } += sel }
     }
 
     /** ".ad-box > img" → ".ad-box"; "#banner" → "#banner"; anything else → null. */
@@ -308,6 +362,8 @@ class AdBlock private constructor() {
         var notDomains: Array<String>? = null
         var important = false
         var pageFlag = 0
+        var redirect: String? = null
+        var redirectOnly = false
         if (opts.isNotEmpty()) {
             for (o in opts.lowercase().split(',')) {
                 val neg = o.startsWith('~')
@@ -324,7 +380,12 @@ class AdBlock private constructor() {
                     }
                     name == "important" -> important = true
                     name == "all" -> types = 0
-                    name == "redirect" -> Unit // block instead of redirecting
+                    name == "redirect" || name == "redirect-rule" -> {
+                        // Exceptions to redirects are rare and must not become plain allow rules: skip them.
+                        if (exception || !o.contains('=')) return
+                        redirect = o.substringAfter('=').let { v -> if (PRIORITY.containsMatchIn(v)) v.substringBeforeLast(':') else v }
+                        redirectOnly = name == "redirect-rule"
+                    }
                     name == "document" || name == "doc" -> if (exception) pageFlag = pageFlag or FLAG_DOCUMENT else types = types or Type.DOCUMENT.bit
                     name == "elemhide" || name == "ehide" -> if (exception) pageFlag = pageFlag or FLAG_ELEMHIDE else return
                     name == "generichide" || name == "ghide" -> if (exception) pageFlag = pageFlag or FLAG_GENERICHIDE else return
@@ -337,25 +398,24 @@ class AdBlock private constructor() {
             if (pageFlag == 0 && domains == null) return // would block everything
             pattern = "*"
         }
-        val netRule = NetRule(pattern.takeUnless { isPureHost(it) } ?: "", types, notTypes, party, domains, notDomains, important)
+        val netRule = NetRule(pattern.takeUnless { isPureHost(it) } ?: "", types, notTypes, party, domains, notDomains, important, redirect)
         if (pageFlag != 0) {
             docAllow += NetRule(pattern, 0, 0, 0, domains, notDomains, false) to pageFlag
             if (types == 0 && pageFlag and FLAG_DOCUMENT == 0) return
         }
         networkRules++
-        if (isPureHost(pattern)) {
-            val host = pattern.removePrefix("||").removeSuffix("^").removeSuffix("^|")
-            (if (exception) allowHosts else blockHosts).getOrPut(host) { ArrayList(1) } += netRule
-            return
-        }
-        val withHost = if (pattern.startsWith("||")) hostPart(pattern) else null
-        if (withHost != null) {
-            (if (exception) allowHosts else blockHosts).getOrPut(withHost) { ArrayList(1) } +=
-                NetRule(pattern, types, notTypes, party, domains, notDomains, important)
-            return
-        }
-        (if (exception) allowTokens else blockTokens).getOrPut(bestToken(pattern)) { ArrayList(1) } +=
-            NetRule(pattern, types, notTypes, party, domains, notDomains, important)
+        val indexed = if (isPureHost(pattern)) netRule else NetRule(pattern, types, notTypes, party, domains, notDomains, important, redirect)
+        if (redirect != null) index(indexed, pattern, redirectHosts, redirectTokens)
+        if (redirectOnly) return
+        if (exception) index(indexed, pattern, allowHosts, allowTokens) else index(indexed, pattern, blockHosts, blockTokens)
+    }
+
+    /** Files a rule under its host ("||ads.example^…") or, failing that, its most distinctive word. */
+    private fun index(rule: NetRule, pattern: String, hosts: HashMap<String, MutableList<NetRule>>, tokens: HashMap<String, MutableList<NetRule>>) {
+        val host = if (isPureHost(pattern)) pattern.removePrefix("||").removeSuffix("^").removeSuffix("^|")
+        else if (pattern.startsWith("||")) hostPart(pattern) else null
+        if (host != null) hosts.getOrPut(host) { ArrayList(1) } += rule
+        else tokens.getOrPut(bestToken(pattern)) { ArrayList(1) } += rule
     }
 
     private fun isPureHost(p: String) = p.startsWith("||") && HOST_ONLY.matches(p.substring(2))
@@ -392,7 +452,18 @@ class AdBlock private constructor() {
         const val FLAG_ELEMHIDE = 2
         const val FLAG_GENERICHIDE = 4
 
-        private val UNSUPPORTED_MARKERS = listOf("#?#", "#$#", "#%#", "#@?#", "#@$#", "#@%#", "##^", "#@#^")
+        private val UNSUPPORTED_MARKERS = listOf("#$#", "#%#", "#@$#", "#@%#", "##^", "#@#^")
+
+        /** Procedural operators assets/page.js runs. */
+        private val PROCEDURAL = Regex(
+            """:(has-text|-abp-contains|-abp-has|upward|nth-ancestor|remove|matches-css|matches-css-before|""" +
+                """matches-css-after|min-text-length|xpath|matches-path|style)\(""",
+        )
+        private val PROCEDURAL_NOT_YET = Regex(
+            """:(others|watch-attr|matches-attr|if|if-not|matches-prop|matches-media|shadow|remove-attr|remove-class)\(""",
+        )
+        // A :style() that could load something or run script.
+        private val UNSAFE_STYLE = Regex("""url\(|expression|image-set|@import|\\""", RegexOption.IGNORE_CASE)
         private val SCRIPTLET = Regex("""^([^#]*)#(@?)#\+js\((.*)\)$""")
 
         /** uBlock's scriptlet names and short names → the names assets/scriptlets.js knows. */
@@ -475,6 +546,7 @@ class AdBlock private constructor() {
             }
             return sb.append('"').toString()
         }
+        private val PRIORITY = Regex(""":\d+$""") // "redirect=noop.js:5": the priority is dropped
         private val OPTIONS = Regex("""[\w~,=|.\-:*+/]+""")
         private val HOST_ONLY = Regex("""[a-z0-9.\-_]+\^?\|?""")
         private val UNSUPPORTED_CSS = Regex(
@@ -557,8 +629,31 @@ class AdBlock private constructor() {
         /** Builds the blocker from the text of one or more filter lists. */
         fun parse(lists: List<String>): AdBlock {
             val ab = AdBlock()
-            for (text in lists) text.lineSequence().forEach { runCatching { ab.addLine(it) } }
+            val switchedOff = badFiltered(lists)
+            for (text in lists) text.lineSequence().forEach { line ->
+                if (switchedOff.isEmpty() || line.trim() !in switchedOff) runCatching { ab.addLine(line) }
+            }
             return ab
         }
+
+        /**
+         * Rules switched off by "rule$badfilter" lines in any list, as the exact text of the rule each one cancels
+         * ("||x^$script,badfilter" cancels "||x^$script"). List authors use it to retire rules that break sites.
+         */
+        private fun badFiltered(lists: List<String>): Set<String> {
+            val out = HashSet<String>()
+            for (text in lists) text.lineSequence().forEach { raw ->
+                val line = raw.trim()
+                val dollar = line.lastIndexOf('$')
+                if (dollar <= 0 || !line.endsWith("badfilter") && !line.contains("badfilter,")) return@forEach
+                val opts = line.substring(dollar + 1).split(',')
+                if (BADFILTER !in opts) return@forEach
+                val rest = opts.filter { it != BADFILTER }
+                out += line.substring(0, dollar) + if (rest.isEmpty()) "" else "$" + rest.joinToString(",")
+            }
+            return out
+        }
+
+        private const val BADFILTER = "badfilter"
     }
 }
