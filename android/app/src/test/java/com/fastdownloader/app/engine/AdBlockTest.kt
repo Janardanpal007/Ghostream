@@ -129,6 +129,46 @@ class AdBlockTest {
     }
 
     @Test
+    fun regexRulesBlockWhatTheyMatch() {
+        val a = ab(
+            "/\\.adserv\\.[a-z]+\\/banner/",
+            "@@/\\.adserv\\.ok\\/banner/",
+            "/^https?:\\/\\/[a-z]{8,12}\\.(com|net)\\/[a-z0-9]{20,}\\.js/\$script,third-party",
+            "/(unclosed/",
+        )
+        assertTrue(a.shouldBlock("https://x.adserv.io/banner/1.png", page, Type.IMAGE))
+        assertFalse(a.shouldBlock("https://adserv.io/banner/1.png", page, Type.IMAGE))
+        assertFalse(a.shouldBlock("https://x.adserv.ok/banner/1.png", page, Type.IMAGE))
+        assertTrue(a.shouldBlock("https://qwertyuiop.com/abcdefghij0123456789xyz.js", page, Type.SCRIPT))
+        assertFalse(a.shouldBlock("https://qwertyuiop.com/abcdefghij0123456789xyz.js", page, Type.IMAGE))
+        assertEquals(3, a.networkRules) // the broken regex is skipped, not counted
+    }
+
+    @Test
+    fun regexTokensAreOnlyWordsEveryMatchMustContain() {
+        assertEquals("adserv", AdBlock.regexToken("\\.adserv\\.[a-z]+"))
+        assertEquals("pixel", AdBlock.regexToken("\\/pixel\\.gif"))
+        assertNull(AdBlock.regexToken("(ads|track)\\.js"))
+        assertNull(AdBlock.regexToken("\\.foo\\.com|\\.bar\\.net"))
+        assertNull(AdBlock.regexToken("\\.ads?\\."))
+        assertNull(AdBlock.regexToken("\\.ads\\.?x"))
+        assertNull(AdBlock.regexToken("[a-z]{30,}"))
+    }
+
+    @Test
+    fun removeparamCleansTrackingFromPageAddresses() {
+        val a = ab("||shop.test^\$removeparam=ref", "||news.test^\$removeparam=/^track_/", "||all.test^\$xhr,removeparam")
+        // Common tracking parameters go everywhere; the rest stay in place.
+        assertEquals("https://x.org/a?id=5#top", a.cleanUrl("https://x.org/a?utm_source=tw&id=5&fbclid=abc#top"))
+        assertEquals("https://shop.test/p?id=1", a.cleanUrl("https://shop.test/p?ref=mail&id=1"))
+        assertEquals("https://news.test/s", a.cleanUrl("https://news.test/s?track_a=1&track_b=2"))
+        assertNull(a.cleanUrl("https://all.test/p?x=1")) // an $xhr rule doesn't touch page addresses
+        assertNull(a.cleanUrl("https://x.org/a?id=5"))
+        assertNull(a.cleanUrl("https://x.org/a"))
+        assertNull(ab("@@||x.org^\$document").cleanUrl("https://x.org/a?utm_source=tw"))
+    }
+
+    @Test
     fun wholePageExceptions() {
         val a = ab("||ads.example^", "@@||trusted.org^\$document", "##.ad", "@@||plain.org^\$generichide", "plain.org##.local-ad")
         assertFalse(a.shouldBlock("https://ads.example/x", "https://trusted.org/page", Type.SCRIPT))

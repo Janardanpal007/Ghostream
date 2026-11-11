@@ -37,8 +37,9 @@ class AdBlock private constructor() {
         val notDomains: Array<String>?,
         val important: Boolean,
         val redirect: String? = null, // stand-in resource name from $redirect= / $redirect-rule=
+        regex: Regex? = null, // "/…/" rules, compiled and checked when parsed
     ) {
-        private var compiled: Regex? = null
+        private var compiled: Regex? = regex
         private val pureHost = pattern.isEmpty() // matched by host index alone
 
         fun matchesUrl(url: String): Boolean {
@@ -68,6 +69,10 @@ class AdBlock private constructor() {
     // $redirect / $redirect-rule: what to answer a blocked request with, instead of nothing.
     private val redirectHosts = HashMap<String, MutableList<NetRule>>()
     private val redirectTokens = HashMap<String, MutableList<NetRule>>()
+
+    // $removeparam: query parameters to strip from page addresses ([name] "" and no [regex] = all of them).
+    private class ParamRule(val rule: NetRule, val name: String, val regex: Regex?)
+    private val paramRules = ArrayList<ParamRule>()
 
     // Whole-page exceptions (@@…$document, $elemhide, $generichide).
     private val docAllow = mutableListOf<Pair<NetRule, Int>>()
@@ -179,6 +184,35 @@ class AdBlock private constructor() {
             genericByToken[t]?.forEach { if (it !in allowed && it !in genericAllow) out.add(it) }
         }
         return out.joinToString("\n")
+    }
+
+    /**
+     * [url] without its tracking parameters (common ones like utm_source and fbclid, plus the lists'
+     * $removeparam rules for pages), or null when there is nothing to remove. For page addresses only:
+     * a WebView can't redirect a page's own requests.
+     */
+    fun cleanUrl(url: String): String? {
+        val q = url.indexOf('?')
+        if (q < 0) return null
+        val end = url.indexOf('#', q).let { if (it < 0) url.length else it }
+        val params = url.substring(q + 1, end).split('&').filter { it.isNotEmpty() }
+        if (params.isEmpty()) return null
+        val lower = url.lowercase()
+        val host = hostOf(lower) ?: return null
+        if (pageFlags(url) and FLAG_DOCUMENT != 0) return null
+        val rules = paramRules.filter { p ->
+            val r = p.rule
+            (r.types == 0 || r.types and Type.DOCUMENT.bit != 0) &&
+                r.matchesContext(if (r.types == 0) Type.OTHER else Type.DOCUMENT, false, host) && r.matchesUrl(lower)
+        }
+        val kept = params.filterNot { pair ->
+            val name = pair.substringBefore('=')
+            name.lowercase() in TRACKING_PARAMS || rules.any { p ->
+                if (p.regex != null) p.regex.containsMatchIn(pair) else p.name.isEmpty() || p.name == name.lowercase()
+            }
+        }
+        if (kept.size == params.size) return null
+        return url.substring(0, q) + (if (kept.isEmpty()) "" else "?" + kept.joinToString("&")) + url.substring(end)
     }
 
     /** The procedural hiding rules for a page, as a JSON array of selector strings for assets/page.js. */
@@ -354,7 +388,7 @@ class AdBlock private constructor() {
             opts = r.substring(dollar + 1)
             r = r.substring(0, dollar)
         }
-        if (r.length > 1 && r.startsWith('/') && r.endsWith('/')) return // regex rules: skipped
+        val regexBody = if (r.length > 2 && r.startsWith('/') && r.endsWith('/')) r.substring(1, r.length - 1) else null
         var types = 0
         var notTypes = 0
         var party = 0
@@ -364,6 +398,7 @@ class AdBlock private constructor() {
         var pageFlag = 0
         var redirect: String? = null
         var redirectOnly = false
+        var removeParam: String? = null
         if (opts.isNotEmpty()) {
             for (o in opts.lowercase().split(',')) {
                 val neg = o.startsWith('~')
@@ -380,6 +415,11 @@ class AdBlock private constructor() {
                     }
                     name == "important" -> important = true
                     name == "all" -> types = 0
+                    name == "removeparam" -> {
+                        if (exception || neg) return // exceptions to it are rare: skip them
+                        // The original case: the value may be a regex ("/^utm_/").
+                        removeParam = opts.split(',').first { it.lowercase().startsWith("removeparam") }.substringAfter('=', "")
+                    }
                     name == "redirect" || name == "redirect-rule" -> {
                         // Exceptions to redirects are rare and must not become plain allow rules: skip them.
                         if (exception || !o.contains('=')) return
@@ -392,6 +432,29 @@ class AdBlock private constructor() {
                     else -> return // $removeparam, $csp, $badfilter, $match-case…: not supported, skip the rule
                 }
             }
+        }
+        if (removeParam != null) {
+            if (regexBody != null || pageFlag != 0) return
+            val spec = removeParam
+            val re = if (spec.length > 2 && spec.startsWith('/') && spec.endsWith('/')) {
+                runCatching { Regex(spec.substring(1, spec.length - 1)) }.getOrNull() ?: return
+            } else null
+            val p = r.lowercase().ifEmpty { "*" }
+            paramRules += ParamRule(NetRule(p, types, notTypes, party, domains, notDomains, false), if (re == null) spec else "", re)
+            networkRules++
+            return
+        }
+        if (regexBody != null) {
+            if (pageFlag != 0) return // whole-page exceptions by regex: too rare to be worth it
+            val re = runCatching { Regex(regexBody, RegexOption.IGNORE_CASE) }.getOrNull() ?: return
+            val rule = NetRule(r, types, notTypes, party, domains, notDomains, important, redirect, re)
+            networkRules++
+            // Filed under a word every match must contain; failing that, checked for every request.
+            val token = regexToken(regexBody) ?: ""
+            if (redirect != null) redirectTokens.getOrPut(token) { ArrayList(1) } += rule
+            if (redirectOnly) return
+            (if (exception) allowTokens else blockTokens).getOrPut(token) { ArrayList(1) } += rule
+            return
         }
         var pattern = r.lowercase()
         if (pattern == "*" || pattern.isEmpty()) {
@@ -547,7 +610,14 @@ class AdBlock private constructor() {
             return sb.append('"').toString()
         }
         private val PRIORITY = Regex(""":\d+$""") // "redirect=noop.js:5": the priority is dropped
-        private val OPTIONS = Regex("""[\w~,=|.\-:*+/]+""")
+        private val OPTIONS = Regex("""[\w~,=|.\-:*+/^\\\[\]()?{}]+""")
+
+        /** Click-tracking parameters removed from every page address. */
+        private val TRACKING_PARAMS = setOf(
+            "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id", "utm_name",
+            "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "yclid", "twclid", "ttclid", "igshid",
+            "mc_eid", "_hsenc", "_hsmi", "mkt_tok", "oly_enc_id", "oly_anon_id", "vero_id", "wickedid",
+        )
         private val HOST_ONLY = Regex("""[a-z0-9.\-_]+\^?\|?""")
         private val UNSUPPORTED_CSS = Regex(
             """:(has-text|-abp-|xpath|matches-css|upward|remove|style|matches-path|min-text-length|watch-attr|others|""" +
@@ -568,6 +638,67 @@ class AdBlock private constructor() {
         )
 
         private fun isTokenChar(c: Char) = c in 'a'..'z' || c in '0'..'9' || c == '%'
+
+        private const val LITERAL_ESCAPED = "./-?=&:_"
+        private const val LITERAL_PLAIN = "-_=&:,;/"
+        private const val QUANTIFIERS = "?*{"
+
+        /**
+         * The longest word (3+ letters) that every URL matched by the regex [re] must contain as a whole word,
+         * or null when there is none for sure (alternatives, optional parts, character classes).
+         */
+        fun regexToken(re: String): String? {
+            if (hasTopLevelChoice(re)) return null
+            var best: String? = null
+            var i = 0
+            var inClass = false
+            while (i < re.length) {
+                val c = re[i]
+                when {
+                    c == '\\' -> { i += 2; continue }
+                    c == '[' -> inClass = true
+                    c == ']' -> inClass = false
+                }
+                if (inClass || !isTokenChar(c)) { i++; continue }
+                val start = i
+                while (i < re.length && isTokenChar(re[i])) i++
+                val long = i - start >= 3 && (best == null || i - start > best.length)
+                if (long && literalBoundaryBefore(re, start) && literalBoundaryAfter(re, i)) best = re.substring(start, i)
+            }
+            return best
+        }
+
+        private fun hasTopLevelChoice(re: String): Boolean {
+            var i = 0
+            var inClass = false
+            while (i < re.length) {
+                when (re[i]) {
+                    '\\' -> i++
+                    '[' -> inClass = true
+                    ']' -> inClass = false
+                    '|' -> if (!inClass) return true
+                }
+                i++
+            }
+            return false
+        }
+
+        private fun literalBoundaryBefore(re: String, start: Int): Boolean {
+            if (start == 0) return false
+            val prev = re[start - 1]
+            if (start >= 2 && re[start - 2] == '\\') return prev in LITERAL_ESCAPED
+            return prev in LITERAL_PLAIN
+        }
+
+        private fun literalBoundaryAfter(re: String, end: Int): Boolean {
+            if (end >= re.length) return false
+            val next = when {
+                re[end] == '\\' && end + 1 < re.length && re[end + 1] in LITERAL_ESCAPED -> end + 2
+                re[end] in LITERAL_PLAIN -> end + 1
+                else -> return false
+            }
+            return next >= re.length || re[next] !in QUANTIFIERS
+        }
 
         fun urlTokens(url: String): Set<String> {
             val out = HashSet<String>()

@@ -385,6 +385,13 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val target = request.url.toString()
             if (Links.isMagnet(target)) { host.download(tab, AddRequest(target)); return true }
+            // Strip click-tracking parameters (utm_source, fbclid, $removeparam rules) from links the page opens.
+            // loadUrl() doesn't come back through here, so this can't loop.
+            if (request.isForMainFrame && !request.isRedirect && request.method == "GET" &&
+                request.url.scheme in setOf("http", "https") && state.blocking(target)
+            ) {
+                Filters.engine?.cleanUrl(target)?.let { clean -> view.loadUrl(clean); return true }
+            }
             if (request.url.scheme !in setOf("http", "https")) {
                 // intent:, market:, tel: and the like open in the app that handles them, when the user tapped.
                 // An ad that tries to open another app is stopped, as the ad blocker stops ad pop-ups.
