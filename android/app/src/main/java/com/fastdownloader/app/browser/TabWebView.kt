@@ -91,6 +91,12 @@ private fun corsHeaders(req: WebResourceRequest, pageUrl: String): Map<String, S
 
 private val redirectBytes = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
 
+/** A cross-site move of the tab this soon after the page opened a new tab is a tab-under. */
+private const val TAB_UNDER_MS = 1_500L
+/** More than this many alert/confirm/prompt boxes within [DIALOG_WINDOW_MS] are dismissed. */
+private const val DIALOGS_ALLOWED = 3
+private const val DIALOG_WINDOW_MS = 60_000L // people dismiss them at reading speed, so the window is long
+
 /**
  * A blocked request whose rule names a stand-in ($redirect=): answer with it, so pages that check their ad
  * script loaded keep working. Null when there is no stand-in; then the request is just blocked.
@@ -357,6 +363,8 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             else -> false
         }
     }
+    // When this page last opened a new tab, for spotting tab-unders (see shouldOverrideUrlLoading).
+    var windowOpenedAt = 0L
     w.webViewClient = object : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             val s2 = request.url.toString()
@@ -385,13 +393,6 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val target = request.url.toString()
             if (Links.isMagnet(target)) { host.download(tab, AddRequest(target)); return true }
-            // Strip click-tracking parameters (utm_source, fbclid, $removeparam rules) from links the page opens.
-            // loadUrl() doesn't come back through here, so this can't loop.
-            if (request.isForMainFrame && !request.isRedirect && request.method == "GET" &&
-                request.url.scheme in setOf("http", "https") && state.blocking(target)
-            ) {
-                Filters.engine?.cleanUrl(target)?.let { clean -> view.loadUrl(clean); return true }
-            }
             if (request.url.scheme !in setOf("http", "https")) {
                 // intent:, market:, tel: and the like open in the app that handles them, when the user tapped.
                 // An ad that tries to open another app is stopped, as the ad blocker stops ad pop-ups.
@@ -415,6 +416,19 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                 blocked++
                 BrowserStore.countBlocked()
                 return true
+            }
+            // Tab-under: the page opened a new tab and, right after, sends this one to another site (the ad).
+            val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
+            val sameSite = { a: String, b: String -> site(a) == site(b) }
+            if (state.blocking() && android.os.SystemClock.uptimeMillis() - windowOpenedAt < TAB_UNDER_MS && !sameSite(target, state.topUrl)) {
+                blocked++
+                BrowserStore.countBlocked()
+                return true
+            }
+            // Strip click-tracking parameters (utm_source, fbclid, $removeparam rules) from links the page opens.
+            // loadUrl() doesn't come back through here, so this can't loop.
+            if (!request.isRedirect && request.method == "GET" && state.blocking(target)) {
+                Filters.engine?.cleanUrl(target)?.let { clean -> view.loadUrl(clean); return true }
             }
             // A link to a file: straight to the download panel instead of a blank page.
             if (Engine.settings.detectFileLinks && isFileLink(target)) {
@@ -505,6 +519,34 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
         override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean =
             host.chooseFiles(callback, params)
 
+        // Scam pages that show alert after alert ("You won!") to trap the user: past a few, they're dismissed.
+        private val dialogTimes = ArrayDeque<Long>()
+        private fun dialogFlood(): Boolean {
+            if (!state.blocking()) return false
+            val now = android.os.SystemClock.uptimeMillis()
+            while (dialogTimes.isNotEmpty() && now - dialogTimes.first() > DIALOG_WINDOW_MS) dialogTimes.removeFirst()
+            dialogTimes.addLast(now)
+            return dialogTimes.size > DIALOGS_ALLOWED
+        }
+
+        override fun onJsAlert(view: WebView, url: String?, message: String?, result: android.webkit.JsResult): Boolean {
+            if (!dialogFlood()) return false
+            result.confirm()
+            return true
+        }
+
+        override fun onJsConfirm(view: WebView, url: String?, message: String?, result: android.webkit.JsResult): Boolean {
+            if (!dialogFlood()) return false
+            result.cancel()
+            return true
+        }
+
+        override fun onJsPrompt(view: WebView, url: String?, message: String?, defaultValue: String?, result: android.webkit.JsPromptResult): Boolean {
+            if (!dialogFlood()) return false
+            result.cancel()
+            return true
+        }
+
         // A page opening a new window. A link the user tapped opens in a new tab. Windows a page opens by itself,
         // or from a tap somewhere else on the page (the usual "pop-under" ad trick), only open when they stay on
         // the same site.
@@ -512,7 +554,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             val blocking = state.blocking()
             fun open(target: String) {
                 if (blocking && Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true) { blocked++; BrowserStore.countBlocked() }
-                else host.openTab(target, tab)
+                else { windowOpenedAt = android.os.SystemClock.uptimeMillis(); host.openTab(target, tab) }
             }
             val hit = view.hitTestResult
             val link = hit.extra?.takeIf {
