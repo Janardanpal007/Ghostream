@@ -215,9 +215,167 @@
 
   try { hide(B.cosmeticBase(location.href)); } catch (e) { /* bridge gone */ }
 
+  // ---------- 1b. procedural hiding: "div:has-text(Sponsored):upward(2)", ":remove()", ":style()"… ----------
+  var PROC_OP = /^:(has-text|-abp-contains|-abp-has|upward|nth-ancestor|remove|matches-css-before|matches-css-after|matches-css|min-text-length|xpath|matches-path|style)\(/;
+  var PROC_ANY = /:(has-text|-abp-contains|-abp-has|upward|nth-ancestor|matches-css|min-text-length|xpath)\(/;
+  // "div.card:has-text(Ad):upward(2)" → [{css:'div.card'}, {op:'has-text', arg:'Ad'}, {op:'upward', arg:'2'}]
+  function closeParen(sel, from) {
+    var depth = 1, j = from;
+    while (j < sel.length && depth > 0) {
+      var c = sel[j];
+      if (c === '\\') { j += 2; continue; }
+      if (c === '(') depth++; else if (c === ')') depth--;
+      j++;
+    }
+    return depth === 0 ? j : -1;
+  }
+  function parseProc(sel) {
+    var steps = [], css = '', i = 0;
+    while (i < sel.length) {
+      var m = PROC_OP.exec(sel.slice(i));
+      if (m) {
+        var start = i + m[0].length, end = closeParen(sel, start);
+        if (end < 0) return null;
+        if (css.trim() || !steps.length) steps.push({ css: css.trim() });
+        css = '';
+        steps.push({ op: m[1], arg: sel.slice(start, end - 1).trim() });
+        i = end;
+        continue;
+      }
+      var ch = sel[i];
+      if (ch === '[') { // attribute values may hold ':' or '('
+        var k = sel.indexOf(']', i);
+        if (k < 0) return null;
+        css += sel.slice(i, k + 1); i = k + 1; continue;
+      }
+      if (ch === '(') { // a native pseudo-class argument, e.g. :not(…) or :has(…)
+        var e2 = closeParen(sel, i + 1);
+        if (e2 < 0) return null;
+        var inner = sel.slice(i + 1, e2 - 1), nat = /:(has|not)$/.exec(css);
+        if (nat && PROC_ANY.test(inner)) { // ":has(div:has-text(AD))": run the inside as a procedural rule too
+          css = css.slice(0, -nat[0].length);
+          if (css.trim() || !steps.length) steps.push({ css: css.trim() });
+          css = '';
+          var sub = parseProc(inner);
+          if (!sub) return null;
+          steps.push({ op: nat[1], steps: sub });
+        } else css += sel.slice(i, e2);
+        i = e2; continue;
+      }
+      css += ch; i++;
+    }
+    if (css.trim()) steps.push({ css: css.trim() });
+    return steps;
+  }
+  function textTest(arg) {
+    var m = /^\/(.*)\/([imsu]*)$/.exec(arg);
+    if (m) { var re = new RegExp(m[1], m[2]); return function (s) { return re.test(s); }; }
+    return function (s) { return s.indexOf(arg) >= 0; };
+  }
+  function cssTest(arg) { // "position: fixed" or "z-index: /^\d{4,}$/"
+    var c = arg.indexOf(':');
+    if (c < 0) return null;
+    var prop = arg.slice(0, c).trim(), val = arg.slice(c + 1).trim();
+    var m = /^\/(.*)\/([imsu]*)$/.exec(val);
+    var re = m ? new RegExp(m[1], m[2])
+      : new RegExp('^' + val.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+    return { prop: prop, re: re };
+  }
+  function filterStep(nodes, op, a) {
+    switch (op) {
+      case 'has-text': case '-abp-contains':
+        var tt = textTest(a);
+        return nodes.filter(function (el) { return tt(el.textContent || ''); });
+      case 'min-text-length':
+        var len = parseInt(a, 10) || 0;
+        return nodes.filter(function (el) { return (el.textContent || '').length >= len; });
+      case '-abp-has':
+        return nodes.filter(function (el) { return el.querySelector(':scope ' + a) !== null; });
+      case 'matches-css': case 'matches-css-before': case 'matches-css-after':
+        var ct = cssTest(a);
+        if (!ct) return [];
+        var pseudo = op === 'matches-css' ? null : '::' + op.slice(12);
+        return nodes.filter(function (el) { return ct.re.test(getComputedStyle(el, pseudo).getPropertyValue(ct.prop)); });
+      case 'upward': case 'nth-ancestor':
+        var num = /^\d+$/.test(a) ? parseInt(a, 10) : 0;
+        return nodes.map(function (el) {
+          if (num) { var p = el; for (var u = 0; u < num && p; u++) p = p.parentElement; return p; }
+          return el.parentElement ? el.parentElement.closest(a) : null;
+        }).filter(Boolean);
+      default:
+        return null; // unknown: the rule is skipped
+    }
+  }
+  function all(root, css) { return Array.prototype.slice.call(root.querySelectorAll(css)); }
+  /**
+   * Runs parsed steps. Without [ctx] they start from the page; with it, from inside ctx (":has(…)"), or on ctx
+   * itself when [self] is set (":not(…)"). Returns {nodes, action, style}, or null when nothing can match.
+   */
+  function select(steps, ctx, self) {
+    var nodes = null, action = 'hide', style = '';
+    function begin(css) {
+      if (!ctx) return all(document, css || 'body *');
+      if (self) return css && !ctx.matches(css) ? [] : [ctx];
+      return all(ctx, css ? ':scope ' + css : '*');
+    }
+    for (var s = 0; s < steps.length; s++) {
+      var st = steps[s];
+      if (st.css !== undefined) {
+        if (nodes === null) nodes = begin(st.css);
+        else nodes = nodes.reduce(function (acc, el) { return acc.concat(all(el, ':scope ' + st.css)); }, []);
+      } else if (st.op === 'has' || st.op === 'not') {
+        if (nodes === null) nodes = begin('');
+        var want = st.op === 'has';
+        nodes = nodes.filter(function (el) {
+          var r = select(st.steps, el, !want);
+          return !!(r && r.nodes && r.nodes.length) === want;
+        });
+      } else if (st.op === 'xpath') {
+        var found = [];
+        (nodes === null ? [document] : nodes).forEach(function (ctx) {
+          var r = document.evaluate(st.arg, ctx, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+          for (var x = 0; x < r.snapshotLength; x++) if (r.snapshotItem(x).nodeType === 1) found.push(r.snapshotItem(x));
+        });
+        nodes = found;
+      } else if (st.op === 'matches-path') {
+        if (!textTest(st.arg)(location.pathname + location.search)) return null;
+      } else if (st.op === 'remove') {
+        action = 'remove';
+      } else if (st.op === 'style') {
+        action = 'style'; style = st.arg;
+      } else {
+        if (nodes === null) nodes = begin('');
+        nodes = filterStep(nodes, st.op, st.arg);
+        if (nodes === null) return null;
+      }
+      if (nodes && !nodes.length) return null;
+    }
+    return { nodes: nodes, action: action, style: style };
+  }
+  function runSteps(steps) {
+    var r = select(steps, null, false);
+    if (!r || !r.nodes) return;
+    var action = r.action, style = r.style;
+    r.nodes.forEach(function (el) {
+      if (el === document.documentElement || el === document.body) return; // never blank the whole page
+      if (action === 'remove') el.remove();
+      else if (action === 'style') el.style.cssText += ';' + style;
+      else el.style.setProperty('display', 'none', 'important');
+    });
+  }
+  var procRules = [];
+  try { procRules = JSON.parse(B.proceduralFor(location.href)).map(parseProc).filter(Boolean); } catch (e) { procRules = []; }
+  var procTimer = 0;
+  function runProcedural() {
+    procTimer = 0;
+    procRules.forEach(function (steps) { try { runSteps(steps); } catch (e) { /* a rule this page can't run */ } });
+  }
+  function procSoon() { if (procRules.length && !procTimer) procTimer = setTimeout(runProcedural, 300); }
+
   function start() {
     scan(document.documentElement);
     flush();
+    runProcedural();
     new MutationObserver(function (muts) {
       for (var i = 0; i < muts.length; i++) {
         var m = muts[i];
@@ -225,6 +383,7 @@
         else for (var j = 0; j < m.addedNodes.length; j++) scan(m.addedNodes[j]);
       }
       if (pending.length) later();
+      procSoon();
     }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['id', 'class'] });
     setInterval(placeButtons, 400);
     addEventListener('scroll', placeButtons, { passive: true, capture: true });

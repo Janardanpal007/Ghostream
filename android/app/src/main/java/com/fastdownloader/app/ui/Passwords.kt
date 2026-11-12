@@ -196,7 +196,7 @@ fun LoginBar(tab: BrowserTab, web: WebView?) {
 }
 
 @Composable
-private fun BarRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+internal fun BarRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().background(colors.panel)) {
         Divider()
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, content = content)

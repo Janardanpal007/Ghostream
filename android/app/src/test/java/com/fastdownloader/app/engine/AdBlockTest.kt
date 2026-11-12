@@ -3,6 +3,7 @@ package com.fastdownloader.app.engine
 import com.fastdownloader.app.engine.AdBlock.Type
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -58,6 +59,130 @@ class AdBlockTest {
         assertTrue(a.shouldBlock("https://ads.example/x", page, Type.SCRIPT))
         assertFalse(a.shouldBlock("https://ads.example/allowed/x", page, Type.SCRIPT))
         assertTrue(a.shouldBlock("https://strong.test/x", page, Type.SCRIPT))
+    }
+
+    @Test
+    fun badfilterSwitchesOffTheRuleItNamesAcrossLists() {
+        val a = AdBlock.parse(
+            listOf(
+                "||ads.example^\n||cdn.test/ad.js\$script,domain=example.com\n||kept.test^",
+                "||ads.example^\$badfilter\n||cdn.test/ad.js\$script,domain=example.com,badfilter",
+            ),
+        )
+        assertFalse(a.shouldBlock("https://ads.example/x", page, Type.SCRIPT))
+        assertFalse(a.shouldBlock("https://cdn.test/ad.js", page, Type.SCRIPT))
+        assertTrue(a.shouldBlock("https://kept.test/x", page, Type.SCRIPT))
+        assertEquals(1, a.networkRules)
+    }
+
+    @Test
+    fun redirectRulesServeAStandInInsteadOfBlocking() {
+        val a = ab(
+            "||ads.test/ad.js\$script,redirect=noop.js",
+            "||imasdk.googleapis.com/js/sdkloader/ima3.js\$script,redirect=google-ima.js:5",
+            "||plain.test^",
+            "||plain.test/gpt.js\$script,redirect-rule=googletagservices_gpt.js",
+            "||only-rule.test/x.js\$redirect-rule=noop.js",
+            "||safe.test^",
+            "@@||safe.test^\$redirect=noop.js",
+        )
+        assertEquals("noop.js", a.blockOrRedirect("https://ads.test/ad.js", page, Type.SCRIPT))
+        assertEquals("google-ima.js", a.blockOrRedirect("https://imasdk.googleapis.com/js/sdkloader/ima3.js", page, Type.SCRIPT))
+        assertEquals("googletagservices_gpt.js", a.blockOrRedirect("https://plain.test/gpt.js", page, Type.SCRIPT))
+        assertEquals("", a.blockOrRedirect("https://plain.test/other.js", page, Type.SCRIPT))
+        // A $redirect-rule only changes how an already blocked request is answered; it doesn't block on its own.
+        assertNull(a.blockOrRedirect("https://only-rule.test/x.js", page, Type.SCRIPT))
+        // A redirect exception must not turn into a plain allow rule.
+        assertTrue(a.shouldBlock("https://safe.test/x", page, Type.SCRIPT))
+        assertNull(a.blockOrRedirect("https://example.org/app.js", page, Type.SCRIPT))
+    }
+
+    @Test
+    fun redirectNamesAndAliasesFindAStandIn() {
+        assertEquals("application/javascript", Redirects.find("noopjs")?.mime)
+        assertEquals("google-ima.js", Redirects.find("google-ima.js")?.asset)
+        assertEquals("anti-adblock.js", Redirects.find("nofab.js")?.asset)
+        assertEquals("image/gif", Redirects.find("1x1.gif")?.mime)
+        assertNull(Redirects.find("noop-1s.mp4")) // no stand-in: the request is simply blocked
+        // Every asset a resource names must ship with the app.
+        val names = listOf("google-ima.js", "googletagservices_gpt.js", "googlesyndication_adsbygoogle.js", "google-analytics.js", "anti-adblock.js")
+        names.forEach { assertTrue(it, File("src/main/assets/redirects/$it").isFile) }
+    }
+
+    @Test
+    fun proceduralRulesAreServedPerSiteAndNotAsCss() {
+        val a = ab(
+            "example.com##div.card:has-text(Sponsored)",
+            "example.com#?#div:-abp-contains(Promoted)",
+            "example.com##.x:upward(2):remove()",
+            "example.com#@#.x:upward(2):remove()",
+            "##div:has-text(ad)", // generic procedural rules are too slow to run everywhere: dropped
+            "other.org##p.promo:style(color: red !important)",
+            "other.org##p:style(background: url(https://x.test/a.png))", // can load things: dropped
+            "other.org##div:others()", // not supported: dropped
+        )
+        assertEquals("""["div.card:has-text(Sponsored)","div:-abp-contains(Promoted)"]""", a.proceduralFor("https://www.example.com/"))
+        assertEquals("", a.cosmeticBase("https://www.example.com/"))
+        assertEquals("""["p.promo:style(color: red !important)"]""", a.proceduralFor("https://other.org/"))
+        assertEquals("[]", a.proceduralFor("https://unrelated.net/"))
+        assertEquals("[]", ab("@@||example.com^\$elemhide", "example.com##div:has-text(x)").proceduralFor("https://example.com/"))
+    }
+
+    @Test
+    fun regexRulesBlockWhatTheyMatch() {
+        val a = ab(
+            "/\\.adserv\\.[a-z]+\\/banner/",
+            "@@/\\.adserv\\.ok\\/banner/",
+            "/^https?:\\/\\/[a-z]{8,12}\\.(com|net)\\/[a-z0-9]{20,}\\.js/\$script,third-party",
+            "/(unclosed/",
+        )
+        assertTrue(a.shouldBlock("https://x.adserv.io/banner/1.png", page, Type.IMAGE))
+        assertFalse(a.shouldBlock("https://adserv.io/banner/1.png", page, Type.IMAGE))
+        assertFalse(a.shouldBlock("https://x.adserv.ok/banner/1.png", page, Type.IMAGE))
+        assertTrue(a.shouldBlock("https://qwertyuiop.com/abcdefghij0123456789xyz.js", page, Type.SCRIPT))
+        assertFalse(a.shouldBlock("https://qwertyuiop.com/abcdefghij0123456789xyz.js", page, Type.IMAGE))
+        assertEquals(3, a.networkRules) // the broken regex is skipped, not counted
+    }
+
+    @Test
+    fun regexTokensAreOnlyWordsEveryMatchMustContain() {
+        assertEquals("adserv", AdBlock.regexToken("\\.adserv\\.[a-z]+"))
+        assertEquals("pixel", AdBlock.regexToken("\\/pixel\\.gif"))
+        assertNull(AdBlock.regexToken("(ads|track)\\.js"))
+        assertNull(AdBlock.regexToken("\\.foo\\.com|\\.bar\\.net"))
+        assertNull(AdBlock.regexToken("\\.ads?\\."))
+        assertNull(AdBlock.regexToken("\\.ads\\.?x"))
+        assertNull(AdBlock.regexToken("[a-z]{30,}"))
+    }
+
+    @Test
+    fun removeparamCleansTrackingFromPageAddresses() {
+        val a = ab("||shop.test^\$removeparam=ref", "||news.test^\$removeparam=/^track_/", "||all.test^\$xhr,removeparam")
+        // Common tracking parameters go everywhere; the rest stay in place.
+        assertEquals("https://x.org/a?id=5#top", a.cleanUrl("https://x.org/a?utm_source=tw&id=5&fbclid=abc#top"))
+        assertEquals("https://shop.test/p?id=1", a.cleanUrl("https://shop.test/p?ref=mail&id=1"))
+        assertEquals("https://news.test/s", a.cleanUrl("https://news.test/s?track_a=1&track_b=2"))
+        assertNull(a.cleanUrl("https://all.test/p?x=1")) // an $xhr rule doesn't touch page addresses
+        assertNull(a.cleanUrl("https://x.org/a?id=5"))
+        assertNull(a.cleanUrl("https://x.org/a"))
+        assertNull(ab("@@||x.org^\$document").cleanUrl("https://x.org/a?utm_source=tw"))
+        // A name with capitals matches as written.
+        assertEquals("https://cap.test/p?id=1", ab("||cap.test^\$removeparam=refID").cleanUrl("https://cap.test/p?refID=7&id=1"))
+    }
+
+    @Test
+    fun plainHostRulesBlockLikeOtherRules() {
+        val page = "https://news.org/"
+        val a = ab("||ads.example^", "0.0.0.0 track.example", "@@||ok.ads.example^", "||ads.example^\$important,image", "||bad host^")
+        assertTrue(a.shouldBlock("https://ads.example/x.js", page, Type.SCRIPT))
+        assertTrue(a.shouldBlock("https://cdn.ads.example/x.js", page, Type.SCRIPT)) // subdomains too
+        assertTrue(a.shouldBlock("https://track.example/p", page, Type.XHR)) // hosts-file line
+        assertFalse(a.shouldBlock("https://ads.example/", page, Type.DOCUMENT)) // not whole pages…
+        assertFalse(a.shouldBlock("https://ads.example/", page, Type.POPUP)) // …or pop-ups
+        assertFalse(a.shouldBlock("https://ok.ads.example/x.js", page, Type.SCRIPT)) // exceptions still win
+        assertTrue(a.shouldBlock("https://ok.ads.example/x.png", page, Type.IMAGE)) // except over $important
+        assertFalse(a.shouldBlock("https://adsxexample/", page, Type.SCRIPT))
+        assertFalse(a.shouldBlock("https://notads.example/", page, Type.SCRIPT))
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.fastdownloader.app.browser
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.util.Log
 import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
@@ -34,6 +35,7 @@ import com.fastdownloader.app.engine.Engine
 import com.fastdownloader.app.engine.Filters
 import com.fastdownloader.app.engine.Links
 import com.fastdownloader.app.engine.Net
+import com.fastdownloader.app.engine.Redirects
 import com.fastdownloader.app.engine.Turbo
 import com.fastdownloader.app.ui.AddRequest
 import kotlinx.serialization.json.Json
@@ -69,20 +71,52 @@ private val MEDIA = Regex("""\.(m3u8|mpd|mp4|m4v|webm|mkv|mov|mp3|m4a|aac|ogg|op
 /** Sites whose https:// version failed this run: they're loaded over http:// as asked. */
 private val httpsFailed = java.util.Collections.synchronizedSet(HashSet<String>())
 
+/** A body that can't be read: WebView then ends the request with a network error (net::ERR_FAILED). */
+private class FailingStream : java.io.InputStream() {
+    override fun available(): Int = throw java.io.IOException("blocked")
+    override fun read(): Int = throw java.io.IOException("blocked")
+}
+
 /**
- * The answer to a blocked request: "204 No Content", readable from the page's origin. A browser extension
- * makes blocked requests fail; WebView can't, and an empty 200 reply or a cross-origin error breaks
- * sites like YouTube that expect their tracking calls to just fail quietly.
+ * The answer to a blocked request: it fails as a network error, the way a browser extension blocks.
+ * Any HTTP reply, even an empty "204", tells the page the request got through (fetch() resolves),
+ * which ad-block checks and anti-adblock scripts read as "not blocked".
  */
-private fun blockedResponse(req: WebResourceRequest, pageUrl: String): WebResourceResponse {
+@Suppress("UNUSED_PARAMETER")
+private fun blockedResponse(req: WebResourceRequest, pageUrl: String): WebResourceResponse =
+    WebResourceResponse("text/plain", "utf-8", FailingStream())
+
+private fun corsHeaders(req: WebResourceRequest, pageUrl: String): Map<String, String> {
     val origin = req.requestHeaders["Origin"] ?: req.requestHeaders["origin"]
         ?: pageUrl.substringBefore("://", "").let { scheme -> if (scheme.isEmpty()) "*" else "$scheme://" + (AdBlock.hostOf(pageUrl) ?: "") }
-    val headers = mapOf(
+    return mapOf(
         "Access-Control-Allow-Origin" to origin,
         "Access-Control-Allow-Credentials" to "true",
         "Cache-Control" to "no-store",
     )
-    return WebResourceResponse("text/plain", "utf-8", 204, "No Content", headers, ByteArrayInputStream(ByteArray(0)))
+}
+
+private val redirectBytes = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+
+/** A cross-site move of the tab this soon after the page opened a new tab is a tab-under. */
+private const val TAB_UNDER_MS = 1_500L
+/** More than this many alert/confirm/prompt boxes within [DIALOG_WINDOW_MS] are dismissed. */
+private const val DIALOGS_ALLOWED = 3
+private const val DIALOG_WINDOW_MS = 60_000L // people dismiss them at reading speed, so the window is long
+
+/**
+ * A blocked request whose rule names a stand-in ($redirect=): answer with it, so pages that check their ad
+ * script loaded keep working. Null when there is no stand-in; then the request is just blocked.
+ */
+private fun redirectResponse(ctx: Context, name: String, req: WebResourceRequest, pageUrl: String): WebResourceResponse? {
+    if (name.isEmpty()) return null
+    val r = Redirects.find(name) ?: return null
+    val bytes = r.bytes ?: r.asset?.let { file ->
+        redirectBytes[file] ?: runCatching { ctx.assets.open("redirects/$file").use { it.readBytes() } }
+            .onFailure { Log.w("TabWebView", "stand-in $file missing", it) }
+            .getOrNull()?.also { redirectBytes[file] = it }
+    } ?: return null
+    return WebResourceResponse(r.mime, "utf-8", 200, "OK", corsHeaders(req, pageUrl), ByteArrayInputStream(bytes))
 }
 
 /** Resource type for filter rules like $script or $image. WebView doesn't say, so it's worked out. */
@@ -210,6 +244,10 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
         if (state.blocking()) Filters.engine?.cosmeticBase(url) ?: "" else ""
 
     @JavascriptInterface
+    fun proceduralFor(url: String): String =
+        if (state.blocking()) Filters.engine?.proceduralFor(url) ?: "[]" else "[]"
+
+    @JavascriptInterface
     fun cosmeticFor(url: String, idsAndClasses: String): String =
         if (state.blocking()) Filters.engine?.cosmeticFor(url, idsAndClasses.take(200_000)) ?: "" else ""
 
@@ -332,14 +370,19 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             else -> false
         }
     }
+    // When this page last opened a new tab, for spotting tab-unders (see shouldOverrideUrlLoading).
+    var windowOpenedAt = 0L
+    // When this page showed its recent alert/confirm/prompt boxes; a new page starts afresh.
+    val dialogTimes = ArrayDeque<Long>()
     w.webViewClient = object : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             val s2 = request.url.toString()
             if (!request.isForMainFrame && state.blocking()) {
                 val engine = Filters.engine
-                if (engine != null && engine.shouldBlock(s2, state.topUrl, typeOf(request))) {
+                val verdict = engine?.blockOrRedirect(s2, state.topUrl, typeOf(request))
+                if (verdict != null) {
                     view.post { blocked++; BrowserStore.countBlocked() }
-                    return blockedResponse(request, state.topUrl)
+                    return redirectResponse(view.context, verdict, request, state.topUrl) ?: blockedResponse(request, state.topUrl)
                 }
             }
             MEDIA.find(s2)?.let { m ->
@@ -383,33 +426,47 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                 BrowserStore.countBlocked()
                 return true
             }
+            // Tab-under: the page opened a new tab and, right after, sends this one to another site (the ad).
+            val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
+            val sameSite = { a: String, b: String -> site(a) == site(b) }
+            if (state.popupsBlocked() && android.os.SystemClock.uptimeMillis() - windowOpenedAt < TAB_UNDER_MS && !sameSite(target, state.topUrl)) {
+                blocked++
+                BrowserStore.countBlocked()
+                return true
+            }
+            // Strip click-tracking parameters (utm_source, fbclid, $removeparam rules) from links the page opens.
+            // The cleaned address goes through the checks below too; loadUrl() doesn't come back here, so no loop.
+            val clean = if (!request.isRedirect && request.method == "GET" && state.blocking(target))
+                Filters.engine?.cleanUrl(target) else null
+            val dest = clean ?: target
             // A link to a file: straight to the download panel instead of a blank page.
-            if (Engine.settings.detectFileLinks && isFileLink(target)) {
-                host.download(tab, AddRequest(target, headersFor(target, url)))
+            if (Engine.settings.detectFileLinks && isFileLink(dest)) {
+                host.download(tab, AddRequest(dest, headersFor(dest, url)))
                 return true
             }
             // https:// first. A site that sends its https:// page back to http:// is left on http://.
-            val host2 = Omnibox.hostOf(target)
-            if (target.startsWith("http://") && upgradedFrom != null && Omnibox.hostOf(upgradedFrom!!) == host2) {
+            val host2 = Omnibox.hostOf(dest)
+            if (dest.startsWith("http://") && upgradedFrom != null && Omnibox.hostOf(upgradedFrom!!) == host2) {
                 host2?.let { httpsFailed += it }
                 upgradedFrom = null
             } else {
-                httpsAllowed(target)?.let { up ->
-                    upgradedFrom = target
+                httpsAllowed(dest)?.let { up ->
+                    upgradedFrom = dest
                     BrowserStore.countHttpsUpgrade()
                     applySitePolicy(up)
                     view.loadUrl(up)
                     return true
                 }
             }
-            applySitePolicy(target)
+            applySitePolicy(dest)
+            if (clean != null) { view.loadUrl(clean); return true }
             return false
         }
 
         override fun onPageStarted(view: WebView, pageUrl: String, favicon: Bitmap?) {
             loading = true
             home = false
-            if (pageUrl != url) { clearPage(); tab.favicon = null }
+            if (pageUrl != url) { clearPage(); tab.favicon = null; dialogTimes.clear() }
             url = pageUrl
             state.topUrl = pageUrl
             if (!host.documentStart) view.evaluateJavascript(host.pageScript, null)
@@ -472,21 +529,49 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
         override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean =
             host.chooseFiles(callback, params)
 
+        // Scam pages that show alert after alert ("You won!") to trap the user: past a few, they're dismissed.
+        private fun dialogFlood(): Boolean {
+            if (!state.blocking()) return false
+            val now = android.os.SystemClock.uptimeMillis()
+            while (dialogTimes.isNotEmpty() && now - dialogTimes.first() > DIALOG_WINDOW_MS) dialogTimes.removeFirst()
+            dialogTimes.addLast(now)
+            return dialogTimes.size > DIALOGS_ALLOWED
+        }
+
+        override fun onJsAlert(view: WebView, url: String?, message: String?, result: android.webkit.JsResult): Boolean {
+            if (!dialogFlood()) return false
+            result.confirm()
+            return true
+        }
+
+        override fun onJsConfirm(view: WebView, url: String?, message: String?, result: android.webkit.JsResult): Boolean {
+            if (!dialogFlood()) return false
+            result.cancel()
+            return true
+        }
+
+        override fun onJsPrompt(view: WebView, url: String?, message: String?, defaultValue: String?, result: android.webkit.JsPromptResult): Boolean {
+            if (!dialogFlood()) return false
+            result.cancel()
+            return true
+        }
+
         // A page opening a new window. A link the user tapped opens in a new tab. Windows a page opens by itself,
         // or from a tap somewhere else on the page (the usual "pop-under" ad trick), only open when they stay on
         // the same site.
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
-            val blocking = state.blocking()
+            val blocking = state.popupsBlocked()
+            fun stopped(target: String) { blocked++; BrowserStore.countBlocked(); blockedPopup = target }
             fun open(target: String) {
-                if (blocking && Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true) { blocked++; BrowserStore.countBlocked() }
-                else host.openTab(target, tab)
+                if (blocking && Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true) stopped(target)
+                else { windowOpenedAt = android.os.SystemClock.uptimeMillis(); host.openTab(target, tab) }
             }
             val hit = view.hitTestResult
             val link = hit.extra?.takeIf {
                 hit.type == WebView.HitTestResult.SRC_ANCHOR_TYPE || hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
             }
             if (isUserGesture && link != null && link.startsWith("http")) { open(link); return false }
-            if (!isUserGesture && blocking) { blocked++; BrowserStore.countBlocked(); return false }
+            if (!isUserGesture && blocking) { stopped(""); return false }
             // Not a link: let the window start loading in a hidden view to see where it goes.
             val probe = WebView(view.context)
             if (private && PrivateProfile.supported) WebViewCompat.setProfile(probe, PrivateProfile.NAME)
@@ -496,7 +581,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                 decided = true
                 probe.stopLoading()
                 val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
-                if (!blocking || site(target) == site(state.topUrl)) open(target) else { blocked++; BrowserStore.countBlocked() }
+                if (!blocking || site(target) == site(state.topUrl)) open(target) else stopped(target)
                 probe.post { probe.destroy() }
             }
             probe.webViewClient = object : WebViewClient() {

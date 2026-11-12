@@ -32,6 +32,9 @@ object Filters {
             "peter-lowe", "Peter Lowe's ad and tracking server list",
             "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext", false,
         ),
+        // Whole ad, tracker and phone-maker telemetry hosts (TikTok, Xiaomi, Oppo/Realme, Apple, Yandex…) that the
+        // page-oriented lists above only block on some paths. Downloaded, not bundled: it's large.
+        FilterList("adguard-dns", "AdGuard DNS filter", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt", false),
     )
 
     data class Status(val loading: Boolean = false, val networkRules: Int = 0, val cosmeticRules: Int = 0, val updatedAt: Long = 0, val message: String? = null)
