@@ -171,6 +171,21 @@ class AdBlockTest {
     }
 
     @Test
+    fun plainHostRulesBlockLikeOtherRules() {
+        val page = "https://news.org/"
+        val a = ab("||ads.example^", "0.0.0.0 track.example", "@@||ok.ads.example^", "||ads.example^\$important,image", "||bad host^")
+        assertTrue(a.shouldBlock("https://ads.example/x.js", page, Type.SCRIPT))
+        assertTrue(a.shouldBlock("https://cdn.ads.example/x.js", page, Type.SCRIPT)) // subdomains too
+        assertTrue(a.shouldBlock("https://track.example/p", page, Type.XHR)) // hosts-file line
+        assertFalse(a.shouldBlock("https://ads.example/", page, Type.DOCUMENT)) // not whole pages…
+        assertFalse(a.shouldBlock("https://ads.example/", page, Type.POPUP)) // …or pop-ups
+        assertFalse(a.shouldBlock("https://ok.ads.example/x.js", page, Type.SCRIPT)) // exceptions still win
+        assertTrue(a.shouldBlock("https://ok.ads.example/x.png", page, Type.IMAGE)) // except over $important
+        assertFalse(a.shouldBlock("https://adsxexample/", page, Type.SCRIPT))
+        assertFalse(a.shouldBlock("https://notads.example/", page, Type.SCRIPT))
+    }
+
+    @Test
     fun wholePageExceptions() {
         val a = ab("||ads.example^", "@@||trusted.org^\$document", "##.ad", "@@||plain.org^\$generichide", "plain.org##.local-ad")
         assertFalse(a.shouldBlock("https://ads.example/x", "https://trusted.org/page", Type.SCRIPT))

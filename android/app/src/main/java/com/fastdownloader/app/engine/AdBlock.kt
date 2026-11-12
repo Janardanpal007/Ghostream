@@ -62,6 +62,10 @@ class AdBlock private constructor() {
 
     // Network rules: plain "||host^" rules by host; the rest by their most distinctive word.
     private val blockHosts = HashMap<String, MutableList<NetRule>>()
+    // Plain "||host^" block rules with no options (most of the hosts lists): just the host, no rule object or list,
+    // which keeps the 200k-odd of them small and quick to load. They all stand for [plainRule].
+    private val plainHosts = HashSet<String>()
+    private val plainRule = NetRule("", 0, 0, 0, null, null, false)
     private val allowHosts = HashMap<String, MutableList<NetRule>>()
     private val blockTokens = HashMap<String, MutableList<NetRule>>()
     private val allowTokens = HashMap<String, MutableList<NetRule>>()
@@ -115,18 +119,21 @@ class AdBlock private constructor() {
         val pageHost = hostOf(pageUrl.lowercase()) ?: host
         if (pageFlags(pageUrl) and FLAG_DOCUMENT != 0) return null
         val third = baseDomain(host) != baseDomain(pageHost)
-        val block = find(blockHosts, blockTokens, u, host, type, third, pageHost) ?: return null
+        val block = find(blockHosts, blockTokens, u, host, type, third, pageHost, plainHosts) ?: return null
         if (!block.important && find(allowHosts, allowTokens, u, host, type, third, pageHost) != null) return null
         return block.redirect ?: find(redirectHosts, redirectTokens, u, host, type, third, pageHost)?.redirect ?: ""
     }
 
     private fun find(
         hosts: Map<String, List<NetRule>>, tokens: Map<String, List<NetRule>>,
-        url: String, host: String, type: Type, third: Boolean, pageHost: String,
+        url: String, host: String, type: Type, third: Boolean, pageHost: String, plain: Set<String>? = null,
     ): NetRule? {
+        // Like any rule with no type options, plain host rules don't apply to pop-ups or whole pages.
+        val plainSet = plain?.takeIf { type != Type.POPUP && type != Type.DOCUMENT }
         var h = host
         while (true) {
             hosts[h]?.firstOrNull { it.matchesContext(type, third, pageHost) && it.matchesUrl(url) }?.let { return it }
+            if (plainSet != null && h in plainSet) return plainRule
             val dot = h.indexOf('.')
             if (dot < 0) break
             h = h.substring(dot + 1)
@@ -278,9 +285,11 @@ class AdBlock private constructor() {
         if (line[0] == '#' && !line.startsWith("##") && !line.startsWith("#@#")) return
         if (line.startsWith("127.0.0.1 ") || line.startsWith("0.0.0.0 ")) {
             val h = line.substringAfter(' ').trim().substringBefore(' ').lowercase()
-            if (h.isNotEmpty() && h != "localhost" && h.contains('.')) addNet("||$h^")
+            if (h != "localhost") addPlainHost(h)
             return
         }
+        // "||ads.example.com^" with nothing else: the quick path.
+        if (line.length > 4 && line.startsWith("||") && line.endsWith('^') && addPlainHost(line.substring(2, line.length - 1).lowercase())) return
         SCRIPTLET.matchEntire(line)?.let { m ->
             addScriptlet(m.groupValues[1], m.groupValues[2] == "@", m.groupValues[3])
             return
@@ -290,6 +299,13 @@ class AdBlock private constructor() {
         val cosmetic = cosmeticSplit(line)
         if (cosmetic != null) addCosmetic(cosmetic.first, cosmetic.second, cosmetic.third)
         else addNet(line)
+    }
+
+    /** Files [host] as a plain block rule. False when it isn't a plain host name (the line then takes the long way). */
+    private fun addPlainHost(host: String): Boolean {
+        if (!host.contains('.') || host.any { !(it in 'a'..'z' || it in '0'..'9' || it == '.' || it == '-' || it == '_') }) return false
+        if (plainHosts.add(host)) networkRules++
+        return true
     }
 
     private fun addScriptlet(domainsPart: String, exception: Boolean, body: String) {
