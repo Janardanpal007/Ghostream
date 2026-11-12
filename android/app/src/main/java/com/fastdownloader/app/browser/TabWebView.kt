@@ -71,13 +71,20 @@ private val MEDIA = Regex("""\.(m3u8|mpd|mp4|m4v|webm|mkv|mov|mp3|m4a|aac|ogg|op
 /** Sites whose https:// version failed this run: they're loaded over http:// as asked. */
 private val httpsFailed = java.util.Collections.synchronizedSet(HashSet<String>())
 
+/** A body that can't be read: WebView then ends the request with a network error (net::ERR_FAILED). */
+private class FailingStream : java.io.InputStream() {
+    override fun available(): Int = throw java.io.IOException("blocked")
+    override fun read(): Int = throw java.io.IOException("blocked")
+}
+
 /**
- * The answer to a blocked request: "204 No Content", readable from the page's origin. A browser extension
- * makes blocked requests fail; WebView can't, and an empty 200 reply or a cross-origin error breaks
- * sites like YouTube that expect their tracking calls to just fail quietly.
+ * The answer to a blocked request: it fails as a network error, the way a browser extension blocks.
+ * Any HTTP reply, even an empty "204", tells the page the request got through (fetch() resolves),
+ * which ad-block checks and anti-adblock scripts read as "not blocked".
  */
+@Suppress("UNUSED_PARAMETER")
 private fun blockedResponse(req: WebResourceRequest, pageUrl: String): WebResourceResponse =
-    WebResourceResponse("text/plain", "utf-8", 204, "No Content", corsHeaders(req, pageUrl), ByteArrayInputStream(ByteArray(0)))
+    WebResourceResponse("text/plain", "utf-8", FailingStream())
 
 private fun corsHeaders(req: WebResourceRequest, pageUrl: String): Map<String, String> {
     val origin = req.requestHeaders["Origin"] ?: req.requestHeaders["origin"]
