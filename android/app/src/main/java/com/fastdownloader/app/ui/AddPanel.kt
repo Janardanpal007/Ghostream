@@ -127,9 +127,11 @@ fun AddPanel(request: AddRequest, onClose: () -> Unit, withStorage: (() -> Unit)
     var fileName by remember(request) { mutableStateOf("") }
     var quality by remember(request) { mutableIntStateOf(0) }
     var checkedUrl by remember(request) { mutableStateOf<String?>(null) }
-    // Pasting any link is Turbo. Free downloads start from the Browser tab, and that link can't be swapped here.
-    val locked = !request.fromBrowser && !Turbo.active
-    val fixedLink = request.fromBrowser && !Turbo.active
+    // Pasting any link is Turbo. Free downloads start from the Browser tab, or are magnet links and .torrent
+    // files opened from other apps; that link can't be swapped here.
+    val free = request.fromBrowser || request.torrent
+    val locked = !free && !Turbo.active
+    val fixedLink = free && !Turbo.active
 
     fun check() {
         val u = url.trim()
@@ -270,12 +272,12 @@ private fun PasteLinkLocked() {
     }
     Spacer(Modifier.height(8.dp))
     Text(
-        "Paste or share any link (files, YouTube and 1,000+ other sites, streams, magnet links and torrents) and Ghostream downloads it. This is part of Ghostream Turbo.",
+        "Paste or share any link (files, YouTube and 1,000+ other sites and streams) and Ghostream downloads it. This is part of Ghostream Turbo.",
         style = Type.body, color = c.muted,
     )
     Spacer(Modifier.height(12.dp))
     Text(
-        "Free: open the page in the Browser tab and tap its download button, or hold a link and choose Download link. Have a key? Settings › Ghostream Turbo › Paste key.",
+        "Free: open the page in the Browser tab and tap its download button, or hold a link and choose Download link. Magnet links and .torrent files opened from other apps are free too. Have a key? Settings › Ghostream Turbo › Paste key.",
         style = Type.body, color = c.text,
     )
 }

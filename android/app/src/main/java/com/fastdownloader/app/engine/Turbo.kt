@@ -9,7 +9,7 @@ import javax.crypto.spec.PBEKeySpec
  * Keys are made in batches on the developer's PC (TurboKeyGen). The keys stay private; the website publishes only
  * a slow one-way hash of each (turbo-keys.txt: "<hash> <expiresDay>", expiresDay 0 = lifetime, days since 1970).
  * Activating hashes the typed key and looks for it in that list, so the app needs internet once; after that the
- * saved list is used offline. Removing a line from the website's list switches that key off at the next check.
+ * saved list is used offline. Removing a line from the website's list switches that key off at the next daily check.
  */
 object Turbo {
     const val FREE_PARTS = 8
@@ -135,7 +135,10 @@ object Turbo {
         return result
     }
 
-    /** Keeps the saved list current (the update check calls this), so a removed key stops working. */
+    /** How often the app refreshes the key list (App's background loop), whether or not update checks are on. */
+    const val LIST_EVERY_MS = 24 * 3600_000L
+
+    /** Keeps the saved list current, so a removed key stops working. A failed download keeps the saved one. */
     fun refreshList() {
         val text = downloadList() ?: return
         if (text.lines() != Engine.settings.turboList) Engine.updateSettings { it.copy(turboList = text.lines()) }

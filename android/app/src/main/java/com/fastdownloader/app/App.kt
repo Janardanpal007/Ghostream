@@ -12,6 +12,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.fastdownloader.app.engine.Engine
 import com.fastdownloader.app.engine.Net
 import com.fastdownloader.app.engine.Status
+import com.fastdownloader.app.engine.Turbo
 import com.fastdownloader.app.engine.Updater
 import com.fastdownloader.app.engine.Ytdlp
 import com.fastdownloader.app.service.DownloadService
@@ -55,9 +56,16 @@ class App : Application() {
         // Keep yt-dlp current, since video sites change often.
         scope.launch { runCatching { Ytdlp.updateIfDue(this@App) } }
         // New versions: checked shortly after start and every 6 hours while the app runs.
+        // Turbo's key list is refreshed on the same loop (at most once a day) even when update checks are off,
+        // so a key removed from the website stops working.
         scope.launch {
             delay(15_000)
+            var listChecked = 0L
             while (true) {
+                if (Engine.settings.turboHash.isNotEmpty() && System.currentTimeMillis() - listChecked >= Turbo.LIST_EVERY_MS) {
+                    listChecked = System.currentTimeMillis()
+                    runCatching { Turbo.refreshList() }
+                }
                 if (Engine.settings.checkUpdates) runCatching { Updater.check()?.let { notifyUpdate(it) } }
                 delay(Updater.EVERY_MS)
             }
