@@ -166,6 +166,8 @@ class AdBlockTest {
         assertNull(a.cleanUrl("https://x.org/a?id=5"))
         assertNull(a.cleanUrl("https://x.org/a"))
         assertNull(ab("@@||x.org^\$document").cleanUrl("https://x.org/a?utm_source=tw"))
+        // A name with capitals matches as written.
+        assertEquals("https://cap.test/p?id=1", ab("||cap.test^\$removeparam=refID").cleanUrl("https://cap.test/p?refID=7&id=1"))
     }
 
     @Test

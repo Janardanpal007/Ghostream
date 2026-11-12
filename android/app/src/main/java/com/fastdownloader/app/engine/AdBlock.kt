@@ -208,7 +208,7 @@ class AdBlock private constructor() {
         val kept = params.filterNot { pair ->
             val name = pair.substringBefore('=')
             name.lowercase() in TRACKING_PARAMS || rules.any { p ->
-                if (p.regex != null) p.regex.containsMatchIn(pair) else p.name.isEmpty() || p.name == name.lowercase()
+                if (p.regex != null) p.regex.containsMatchIn(pair) else p.name.isEmpty() || p.name == name
             }
         }
         if (kept.size == params.size) return null

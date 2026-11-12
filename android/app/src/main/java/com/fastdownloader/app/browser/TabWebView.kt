@@ -365,6 +365,8 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
     }
     // When this page last opened a new tab, for spotting tab-unders (see shouldOverrideUrlLoading).
     var windowOpenedAt = 0L
+    // When this page showed its recent alert/confirm/prompt boxes; a new page starts afresh.
+    val dialogTimes = ArrayDeque<Long>()
     w.webViewClient = object : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             val s2 = request.url.toString()
@@ -426,37 +428,38 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                 return true
             }
             // Strip click-tracking parameters (utm_source, fbclid, $removeparam rules) from links the page opens.
-            // loadUrl() doesn't come back through here, so this can't loop.
-            if (!request.isRedirect && request.method == "GET" && state.blocking(target)) {
-                Filters.engine?.cleanUrl(target)?.let { clean -> view.loadUrl(clean); return true }
-            }
+            // The cleaned address goes through the checks below too; loadUrl() doesn't come back here, so no loop.
+            val clean = if (!request.isRedirect && request.method == "GET" && state.blocking(target))
+                Filters.engine?.cleanUrl(target) else null
+            val dest = clean ?: target
             // A link to a file: straight to the download panel instead of a blank page.
-            if (Engine.settings.detectFileLinks && isFileLink(target)) {
-                host.download(tab, AddRequest(target, headersFor(target, url)))
+            if (Engine.settings.detectFileLinks && isFileLink(dest)) {
+                host.download(tab, AddRequest(dest, headersFor(dest, url)))
                 return true
             }
             // https:// first. A site that sends its https:// page back to http:// is left on http://.
-            val host2 = Omnibox.hostOf(target)
-            if (target.startsWith("http://") && upgradedFrom != null && Omnibox.hostOf(upgradedFrom!!) == host2) {
+            val host2 = Omnibox.hostOf(dest)
+            if (dest.startsWith("http://") && upgradedFrom != null && Omnibox.hostOf(upgradedFrom!!) == host2) {
                 host2?.let { httpsFailed += it }
                 upgradedFrom = null
             } else {
-                httpsAllowed(target)?.let { up ->
-                    upgradedFrom = target
+                httpsAllowed(dest)?.let { up ->
+                    upgradedFrom = dest
                     BrowserStore.countHttpsUpgrade()
                     applySitePolicy(up)
                     view.loadUrl(up)
                     return true
                 }
             }
-            applySitePolicy(target)
+            applySitePolicy(dest)
+            if (clean != null) { view.loadUrl(clean); return true }
             return false
         }
 
         override fun onPageStarted(view: WebView, pageUrl: String, favicon: Bitmap?) {
             loading = true
             home = false
-            if (pageUrl != url) { clearPage(); tab.favicon = null }
+            if (pageUrl != url) { clearPage(); tab.favicon = null; dialogTimes.clear() }
             url = pageUrl
             state.topUrl = pageUrl
             if (!host.documentStart) view.evaluateJavascript(host.pageScript, null)
@@ -520,7 +523,6 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             host.chooseFiles(callback, params)
 
         // Scam pages that show alert after alert ("You won!") to trap the user: past a few, they're dismissed.
-        private val dialogTimes = ArrayDeque<Long>()
         private fun dialogFlood(): Boolean {
             if (!state.blocking()) return false
             val now = android.os.SystemClock.uptimeMillis()
