@@ -434,6 +434,7 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
                 }
             }
             if (!chromeHidden && tab != null && !editing) {
+                PopupBar(tab) { url -> manager.open(url, tab.private, parent = tab) }
                 LoginBar(tab, web)
                 BottomBar(
                     tab = tab,

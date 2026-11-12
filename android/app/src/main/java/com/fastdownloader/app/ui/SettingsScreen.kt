@@ -108,14 +108,14 @@ fun SettingsScreen() {
                     Toggle("Block trackers & ads", "uBlock Origin, EasyList and EasyPrivacy filter lists", s.blockAds) { v -> set { it.copy(blockAds = v) } }
                     Toggle("Upgrade connections to HTTPS", "Falls back to http:// only when a site has no secure version", s.httpsUpgrade) { v -> set { it.copy(httpsUpgrade = v) } }
                     ChoiceList("Cookies", listOf("all" to "All", "block3p" to "No 3rd-party", "none" to "None"), s.cookiePolicy) { v -> set { it.copy(cookiePolicy = v) } }
-                    val exceptions = (s.adblockAllow + s.httpsOffSites + s.scriptBlockSites + s.thirdPartyCookieSites).distinct()
+                    val exceptions = (s.adblockAllow + s.popupAllow + s.httpsOffSites + s.scriptBlockSites + s.thirdPartyCookieSites).distinct()
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Per-site Shields", style = Type.strong, color = c.text)
                             Text(if (exceptions.isEmpty()) "None. Change them with the shield button on a page." else exceptions.joinToString(", "), style = Type.small, color = c.muted)
                         }
                         if (exceptions.isNotEmpty()) LineButton("Reset") {
-                            set { it.copy(adblockAllow = emptyList(), httpsOffSites = emptyList(), scriptBlockSites = emptyList(), thirdPartyCookieSites = emptyList()) }
+                            set { it.copy(adblockAllow = emptyList(), popupAllow = emptyList(), httpsOffSites = emptyList(), scriptBlockSites = emptyList(), thirdPartyCookieSites = emptyList()) }
                         }
                     }
                     Divider()

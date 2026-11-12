@@ -422,7 +422,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             // Tab-under: the page opened a new tab and, right after, sends this one to another site (the ad).
             val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
             val sameSite = { a: String, b: String -> site(a) == site(b) }
-            if (state.blocking() && android.os.SystemClock.uptimeMillis() - windowOpenedAt < TAB_UNDER_MS && !sameSite(target, state.topUrl)) {
+            if (state.popupsBlocked() && android.os.SystemClock.uptimeMillis() - windowOpenedAt < TAB_UNDER_MS && !sameSite(target, state.topUrl)) {
                 blocked++
                 BrowserStore.countBlocked()
                 return true
@@ -553,9 +553,10 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
         // or from a tap somewhere else on the page (the usual "pop-under" ad trick), only open when they stay on
         // the same site.
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
-            val blocking = state.blocking()
+            val blocking = state.popupsBlocked()
+            fun stopped(target: String) { blocked++; BrowserStore.countBlocked(); blockedPopup = target }
             fun open(target: String) {
-                if (blocking && Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true) { blocked++; BrowserStore.countBlocked() }
+                if (blocking && Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true) stopped(target)
                 else { windowOpenedAt = android.os.SystemClock.uptimeMillis(); host.openTab(target, tab) }
             }
             val hit = view.hitTestResult
@@ -563,7 +564,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                 hit.type == WebView.HitTestResult.SRC_ANCHOR_TYPE || hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
             }
             if (isUserGesture && link != null && link.startsWith("http")) { open(link); return false }
-            if (!isUserGesture && blocking) { blocked++; BrowserStore.countBlocked(); return false }
+            if (!isUserGesture && blocking) { stopped(""); return false }
             // Not a link: let the window start loading in a hidden view to see where it goes.
             val probe = WebView(view.context)
             if (private && PrivateProfile.supported) WebViewCompat.setProfile(probe, PrivateProfile.NAME)
@@ -573,7 +574,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                 decided = true
                 probe.stopLoading()
                 val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
-                if (!blocking || site(target) == site(state.topUrl)) open(target) else { blocked++; BrowserStore.countBlocked() }
+                if (!blocking || site(target) == site(state.topUrl)) open(target) else stopped(target)
                 probe.post { probe.destroy() }
             }
             probe.webViewClient = object : WebViewClient() {

@@ -75,6 +75,8 @@ data class Settings(
     val hideShorts: Boolean = true,
     /** Sites where the user turned ad blocking off (the browser's shield button). */
     val adblockAllow: List<String> = emptyList(),
+    /** Sites where the user allowed pop-ups (the "Pop-up blocked" bar). */
+    val popupAllow: List<String> = emptyList(),
     val keepHistory: Boolean = true,
     val userName: String = "",
     /** Look for a newer Ghostream every few hours and notify. */

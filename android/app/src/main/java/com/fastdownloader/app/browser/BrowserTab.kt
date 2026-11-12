@@ -32,6 +32,13 @@ class PageState {
         val host = AdBlock.hostOf(url.lowercase()) ?: return true
         return s.adblockAllow.none { Omnibox.matchesSite(host, it) }
     }
+
+    /** Pop-ups, pop-unders and tab-unders are stopped: blocking is on and the user hasn't allowed them on this site. */
+    fun popupsBlocked(url: String = topUrl): Boolean {
+        if (!blocking(url)) return false
+        val host = AdBlock.hostOf(url.lowercase()) ?: return true
+        return Engine.settings.popupAllow.none { Omnibox.matchesSite(host, it) }
+    }
 }
 
 /**
@@ -65,6 +72,8 @@ class BrowserTab(
     internal var clearHistoryOnLoad = false
     var canForward by mutableStateOf(false)
     var blocked by mutableIntStateOf(0)
+    /** The last pop-up this page was stopped from opening, for the "Pop-up blocked" bar ("" = address unknown). */
+    var blockedPopup by mutableStateOf<String?>(null)
     var desktop by mutableStateOf(desktop)
     /** Page zoom in percent, kept while the tab is open (100 = as the site made it). */
     var zoom by mutableIntStateOf(100)
@@ -152,6 +161,7 @@ class BrowserTab(
         videosByFrame.clear()
         playing = false
         blocked = 0
+        blockedPopup = null
         offerSave()
         loginForm = ""
         fillDismissed = false
