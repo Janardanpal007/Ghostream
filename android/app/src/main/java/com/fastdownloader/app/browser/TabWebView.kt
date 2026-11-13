@@ -382,7 +382,10 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                 val verdict = engine?.blockOrRedirect(s2, state.topUrl, typeOf(request))
                 if (verdict != null) {
                     view.post { blocked++; BrowserStore.countBlocked() }
-                    return redirectResponse(view.context, verdict, request, state.topUrl) ?: blockedResponse(request, state.topUrl)
+                    // Stand-ins (a fake analytics.js) are for script tags and images, which always GET. A HEAD or POST
+                    // comes from fetch() or XMLHttpRequest, where a plain failure is the clearer answer.
+                    val standIn = verdict.takeIf { request.method.equals("GET", ignoreCase = true) } ?: ""
+                    return redirectResponse(view.context, standIn, request, state.topUrl) ?: blockedResponse(request, state.topUrl)
                 }
             }
             MEDIA.find(s2)?.let { m ->

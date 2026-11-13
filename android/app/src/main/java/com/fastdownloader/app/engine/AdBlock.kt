@@ -66,6 +66,10 @@ class AdBlock private constructor() {
     // which keeps the 200k-odd of them small and quick to load. They all stand for [plainRule].
     private val plainHosts = HashSet<String>()
     private val plainRule = NetRule("", 0, 0, 0, null, null, false)
+    // Host lists made for DNS blocking (AdGuard DNS filter). Their "@@" exceptions keep ad click-throughs and app
+    // back-ends working at the DNS level; they undo only that list's own blocks, never what the browser lists block.
+    private val dnsHosts = HashSet<String>()
+    private val dnsAllow = HashSet<String>()
     private val allowHosts = HashMap<String, MutableList<NetRule>>()
     private val blockTokens = HashMap<String, MutableList<NetRule>>()
     private val allowTokens = HashMap<String, MutableList<NetRule>>()
@@ -119,7 +123,7 @@ class AdBlock private constructor() {
         val pageHost = hostOf(pageUrl.lowercase()) ?: host
         if (pageFlags(pageUrl) and FLAG_DOCUMENT != 0) return null
         val third = baseDomain(host) != baseDomain(pageHost)
-        val block = find(blockHosts, blockTokens, u, host, type, third, pageHost, plainHosts) ?: return null
+        val block = find(blockHosts, blockTokens, u, host, type, third, pageHost, plainHosts) ?: dnsBlock(host, type) ?: return null
         if (!block.important && find(allowHosts, allowTokens, u, host, type, third, pageHost) != null) return null
         return block.redirect ?: find(redirectHosts, redirectTokens, u, host, type, third, pageHost)?.redirect ?: ""
     }
@@ -143,6 +147,21 @@ class AdBlock private constructor() {
         }
         tokens[""]?.firstOrNull { it.matchesContext(type, third, pageHost) && it.matchesUrl(url) }?.let { return it }
         return null
+    }
+
+    /** [plainRule] when a DNS list blocks [host] (or a parent) and none of that list's exceptions covers it. */
+    private fun dnsBlock(host: String, type: Type): NetRule? {
+        if (dnsHosts.isEmpty() || type == Type.POPUP || type == Type.DOCUMENT) return null
+        var blocked = false
+        var h = host
+        while (true) {
+            if (h in dnsAllow) return null
+            if (h in dnsHosts) blocked = true
+            val dot = h.indexOf('.')
+            if (dot < 0) break
+            h = h.substring(dot + 1)
+        }
+        return if (blocked) plainRule else null
     }
 
     @Volatile private var lastPage: Pair<String, Int>? = null
@@ -303,9 +322,30 @@ class AdBlock private constructor() {
 
     /** Files [host] as a plain block rule. False when it isn't a plain host name (the line then takes the long way). */
     private fun addPlainHost(host: String): Boolean {
-        if (!host.contains('.') || host.any { !(it in 'a'..'z' || it in '0'..'9' || it == '.' || it == '-' || it == '_') }) return false
+        if (!isPlainHost(host)) return false
         if (plainHosts.add(host)) networkRules++
         return true
+    }
+
+    private fun isPlainHost(host: String): Boolean =
+        host.contains('.') && host.all { it in 'a'..'z' || it in '0'..'9' || it == '.' || it == '-' || it == '_' }
+
+    /**
+     * A line of a DNS host list: "||host^" (or "||host^|") blocks go to [dnsHosts], "@@" host exceptions to
+     * [dnsAllow]. Its other exceptions are dropped, so they can't undo the browser lists; other blocks parse as usual.
+     */
+    private fun addDnsLine(raw: String) {
+        val line = raw.trim()
+        val allow = line.startsWith("@@")
+        val body = (if (allow) line.substring(2) else line).removeSuffix("|")
+        val host = body.takeIf { it.length > 3 && it.startsWith("||") && it.endsWith('^') }
+            ?.substring(2, body.length - 1)?.lowercase()?.takeIf(::isPlainHost)
+        when {
+            host != null && allow -> dnsAllow.add(host)
+            host != null -> if (host !in plainHosts && dnsHosts.add(host)) networkRules++
+            allow -> Unit
+            else -> addLine(line)
+        }
     }
 
     private fun addScriptlet(domainsPart: String, exception: Boolean, body: String) {
@@ -773,13 +813,20 @@ class AdBlock private constructor() {
             return Regex(sb.toString())
         }
 
-        /** Builds the blocker from the text of one or more filter lists. */
-        fun parse(lists: List<String>): AdBlock {
+        /**
+         * Builds the blocker from the text of one or more filter lists. [dnsLists] are host lists made for DNS
+         * blocking, whose exceptions only undo their own blocks (see [dnsHosts]); they're read after [lists].
+         */
+        fun parse(lists: List<String>, dnsLists: List<String> = emptyList()): AdBlock {
             val ab = AdBlock()
-            val switchedOff = badFiltered(lists)
-            for (text in lists) text.lineSequence().forEach { line ->
-                if (switchedOff.isEmpty() || line.trim() !in switchedOff) runCatching { ab.addLine(line) }
+            val switchedOff = badFiltered(lists + dnsLists)
+            fun read(texts: List<String>, add: (String) -> Unit) = texts.forEach { text ->
+                text.lineSequence().forEach { line ->
+                    if (switchedOff.isEmpty() || line.trim() !in switchedOff) runCatching { add(line) }
+                }
             }
+            read(lists, ab::addLine)
+            read(dnsLists, ab::addDnsLine)
             return ab
         }
 

@@ -186,6 +186,25 @@ class AdBlockTest {
     }
 
     @Test
+    fun dnsListExceptionsOnlyUndoTheirOwnBlocks() {
+        val page = "https://getblockify.com/test"
+        val main = "||googleadservices.com^\$third-party\n||crwdcntrl.net^\n@@||ok.example^"
+        val dns = "||googleadservices.com^\n@@||www.googleadservices.com^|\n@@||tags.crwdcntrl.net^|\n" +
+            "||ads.example^|\n@@||cdn.ads.example^|\n||ok.example^\n@@/broad/\$domain=x.com"
+        val a = AdBlock.parse(listOf(main), listOf(dns))
+        // The DNS list's exceptions don't cancel what the other lists block…
+        assertTrue(a.shouldBlock("https://www.googleadservices.com/", page, Type.OTHER))
+        assertTrue(a.shouldBlock("https://tags.crwdcntrl.net/", page, Type.OTHER))
+        // …but do cancel its own blocks.
+        assertTrue(a.shouldBlock("https://x.ads.example/p", page, Type.XHR))
+        assertFalse(a.shouldBlock("https://cdn.ads.example/p", page, Type.XHR))
+        // The other lists' exceptions still undo DNS-list blocks.
+        assertFalse(a.shouldBlock("https://ok.example/p", page, Type.XHR))
+        // Like other host rules, DNS-list blocks leave whole pages alone.
+        assertFalse(a.shouldBlock("https://x.ads.example/", page, Type.DOCUMENT))
+    }
+
+    @Test
     fun wholePageExceptions() {
         val a = ab("||ads.example^", "@@||trusted.org^\$document", "##.ad", "@@||plain.org^\$generichide", "plain.org##.local-ad")
         assertFalse(a.shouldBlock("https://ads.example/x", "https://trusted.org/page", Type.SCRIPT))
