@@ -15,7 +15,7 @@
     hours: 24,
     qr: 'assets/upi-qr.svg'
   };
-  const RELEASE_BASE = 'https://github.com/Janardanpal007/Ghostream/releases/download/v2.1.0/';
+  const RELEASE_BASE = 'https://github.com/Janardanpal007/Ghostream/releases/download/v2.1.1/';
   const features = {
     browse: { number:'01 / BROWSE', title:'Browse', image:'browse.webp', alt:'Ghostream browsing NASA with the shield in the address bar', description:'Tabs, bookmarks and your shield. Right where you need them.' },
     shield: { number:'02 / BLOCK', title:'Shields & privacy', image:'privacy.webp', alt:'Ghostream Shields and privacy settings showing ad blocking, HTTPS upgrades and cookie controls', description:'Open filter lists, HTTPS upgrades and cookie controls. Your settings, your choice.' },
@@ -23,8 +23,8 @@
     reader: { number:'04 / READ', title:'Reader mode', image:'reader.webp', alt:'Ghostream reader mode showing an article as clean, readable text', description:'Just the article, with clean text and adjustable type. A little room to focus.' }
   };
   const releases = {
-    arm64: { label:'ARM64', file:'Ghostream-2.1.0-android-arm64.apk', hash:'51fb9eff66f611c8cc750e39b5cd4eb4487487084d2be694c08ca809f0dbb280' },
-    universal: { label:'Universal', file:'Ghostream-2.1.0-android-universal.apk', hash:'0e99b8033e622d72e061cbfb9d274b7a9b0dafa65c51604c0fb935bb658644bd' }
+    arm64: { label:'ARM64', file:'Ghostream-2.1.1-android-arm64.apk', hash:'e7fde0ac8bc8a3aab823d3540299adb246178d6b596359e3dfa6d70878b77baf' },
+    universal: { label:'Universal', file:'Ghostream-2.1.1-android-universal.apk', hash:'35d383638da76d742dfbd626e6941f55761b7592dd4d290f202e4c5b776265c2' }
   };
   const $ = (s) => document.querySelector(s);
   const tabs = [...document.querySelectorAll('[role="tab"]')];
