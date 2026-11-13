@@ -16,7 +16,8 @@ import java.io.File
  * few days (through the proxy, if one is set).
  */
 object Filters {
-    data class FilterList(val id: String, val name: String, val url: String, val bundled: Boolean)
+    /** [dns]: a host list made for DNS blocking, whose exceptions only undo its own blocks (see [AdBlock.parse]). */
+    data class FilterList(val id: String, val name: String, val url: String, val bundled: Boolean, val dns: Boolean = false)
 
     val LISTS = listOf(
         FilterList("ublock-filters", "uBlock filters", "https://ublockorigin.github.io/uAssets/filters/filters.txt", true),
@@ -34,7 +35,14 @@ object Filters {
         ),
         // Whole ad, tracker and phone-maker telemetry hosts (TikTok, Xiaomi, Oppo/Realme, Apple, Yandex…) that the
         // page-oriented lists above only block on some paths. Downloaded, not bundled: it's large.
-        FilterList("adguard-dns", "AdGuard DNS filter", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt", false),
+        FilterList("adguard-dns", "AdGuard DNS filter", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt", false, dns = true),
+    )
+
+    /** Trackers the lists above only partly cover (they block one file, or nothing, on these). */
+    private val OWN_RULES = listOf(
+        "||snap.licdn.com/li.lms-analytics^", // LinkedIn Insight tag
+        "||redditstatic.com/ads^", // Reddit Pixel
+        "||admob.googleapis.com^", // AdMob
     )
 
     data class Status(val loading: Boolean = false, val networkRules: Int = 0, val cosmeticRules: Int = 0, val updatedAt: Long = 0, val message: String? = null)
@@ -52,15 +60,16 @@ object Filters {
     @Synchronized
     fun load(ctx: Context) {
         _status.value = _status.value.copy(loading = true)
-        val texts = LISTS.mapNotNull { list ->
+        val loaded = LISTS.mapNotNull { list ->
             val f = File(dir(ctx), "${list.id}.txt")
             when {
                 f.exists() -> f.readText()
                 list.bundled -> runCatching { ctx.assets.open("filters/${list.id}.txt").bufferedReader().readText() }.getOrNull()
                 else -> null
-            }
-        } + ownList(ctx)
-        val ab = AdBlock.parse(texts)
+            }?.let { list to it }
+        }
+        val (dnsLists, lists) = loaded.partition { it.first.dns }
+        val ab = AdBlock.parse(lists.map { it.second } + ownList(ctx) + OWN_RULES.joinToString("\n"), dnsLists.map { it.second })
         engine = ab
         val updated = LISTS.mapNotNull { File(dir(ctx), "${it.id}.txt").takeIf { f -> f.exists() }?.lastModified() }.maxOrNull() ?: 0
         _status.value = Status(false, ab.networkRules, ab.cosmeticRules, updated)
