@@ -105,6 +105,18 @@ data class Settings(
     val desktopMode: Boolean = false,
     /** Load http:// pages over https:// when the site supports it. */
     val httpsUpgrade: Boolean = true,
+    /** Never load an http:// page without asking: a site with no secure version shows a warning first. */
+    val httpsOnly: Boolean = false,
+    /** Leaving the app clears history, cookies, cache, site storage and tabs (downloads and settings stay). */
+    val clearOnExit: Boolean = false,
+    /** Hides the details sites use to recognise this phone (canvas, WebGL, audio, hardware figures, battery). */
+    val fingerprintProtection: Boolean = true,
+    /** Private tabs open only after the fingerprint or screen lock. */
+    val lockPrivateTabs: Boolean = false,
+    /** Pages without a dark theme of their own are darkened when the app is dark. */
+    val forceDarkPages: Boolean = false,
+    /** On mobile data: lower YouTube quality, no autoplay, no preloading. */
+    val dataSaver: Boolean = false,
     /** all | block3p | none */
     val cookiePolicy: String = "block3p",
     /** Per-site Shields exceptions. */

@@ -7,6 +7,7 @@
  *  3. Video playlists the page loads under other names, found by their content, for downloading.
  *  4. Video mode: with the phone turned sideways, the playing video fills the screen.
  *  5. YouTube without Shorts (a setting).
+ *  6. Fingerprinting protection and Data saver (settings; parts 0c and 0d).
  */
 (function () {
   'use strict';
@@ -14,6 +15,132 @@
   window.__fdPage = true;
   var B = window.__fdBridge;
   if (!B) return;
+
+  // ---------- 0c. Fingerprinting protection ----------
+  // Sites recognise a phone by tiny differences in how it draws, plays audio and reports its hardware. With the
+  // setting on (and Shields up for the site) readbacks get a few barely visible changes that stay the same for
+  // this site during this run, the graphics card is reported generically, and hardware figures are rounded.
+  (function () {
+    var seed = 0;
+    try { seed = B.fingerprintSeed ? parseInt(B.fingerprintSeed(), 10) >>> 0 : 0; } catch (e) { /* older app */ }
+    if (!seed) return;
+    var MAX_CANVAS_PIXELS = 4000000;
+    // A fixed hash of (seed, position): the same pixel always gets the same change.
+    function h(i) {
+      var x = (i ^ seed) >>> 0;
+      x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
+      x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
+      return (x ^ (x >>> 16)) >>> 0;
+    }
+    function noisyPixels(data) {
+      for (var i = 0; i < data.length; i += 4) {
+        var n = h(i >> 2);
+        if ((n & 7) !== 0) continue;
+        var c = (n >> 3) % 3;
+        data[i + c] = Math.max(0, Math.min(255, data[i + c] + (((n >> 5) & 1) ? 1 : -1)));
+      }
+    }
+    var C2D = window.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype;
+    var origGet = C2D && C2D.getImageData;
+    if (origGet) {
+      C2D.getImageData = function () {
+        var img = origGet.apply(this, arguments);
+        try { noisyPixels(img.data); } catch (e) { /* leave as read */ }
+        return img;
+      };
+    }
+    // toDataURL and toBlob: the same picture, drawn on a copy that carries the changes.
+    function noisyCopy(canvas) {
+      if (!origGet || !canvas.width || !canvas.height || canvas.width * canvas.height > MAX_CANVAS_PIXELS) return null;
+      try {
+        var copy = document.createElement('canvas');
+        copy.width = canvas.width; copy.height = canvas.height;
+        var ctx = copy.getContext('2d');
+        ctx.drawImage(canvas, 0, 0);
+        var img = origGet.call(ctx, 0, 0, copy.width, copy.height);
+        noisyPixels(img.data);
+        ctx.putImageData(img, 0, 0);
+        return copy;
+      } catch (e) { return null; } // a canvas holding another site's picture can't be read: left as it is
+    }
+    var CV = window.HTMLCanvasElement && HTMLCanvasElement.prototype;
+    ['toDataURL', 'toBlob'].forEach(function (name) {
+      var orig = CV && CV[name];
+      if (typeof orig !== 'function') return;
+      CV[name] = function () {
+        var copy = noisyCopy(this);
+        return orig.apply(copy || this, arguments);
+      };
+    });
+    // Graphics card name.
+    [window.WebGLRenderingContext, window.WebGL2RenderingContext].forEach(function (G) {
+      var orig = G && G.prototype.getParameter;
+      if (!orig) return;
+      G.prototype.getParameter = function (p) {
+        if (p === 0x9245) return 'Google Inc.';
+        if (p === 0x9246) return 'ANGLE (Generic GPU)';
+        return orig.apply(this, arguments);
+      };
+    });
+    // Audio: each channel of a buffer changes once, a hair below what anyone can hear.
+    var AB = window.AudioBuffer && AudioBuffer.prototype;
+    var origChannel = AB && AB.getChannelData;
+    if (origChannel) {
+      var done = new WeakSet();
+      AB.getChannelData = function () {
+        var data = origChannel.apply(this, arguments);
+        if (!done.has(data)) {
+          done.add(data);
+          for (var i = 0; i < data.length; i += 97) data[i] += ((h(i) & 1) ? 1 : -1) * 1e-7;
+        }
+        return data;
+      };
+    }
+    // Hardware figures: 4 to 8 cores, 8 GB, and no battery details.
+    function define(name, value) {
+      try { Object.defineProperty(Navigator.prototype, name, { configurable: true, enumerable: true, get: function () { return value; } }); }
+      catch (e) { /* not changeable here */ }
+    }
+    var cores = navigator.hardwareConcurrency || 4;
+    define('hardwareConcurrency', Math.min(8, Math.max(4, cores - (cores % 2))));
+    define('deviceMemory', 8);
+    try { delete Navigator.prototype.getBattery; } catch (e) { /* stays */ }
+  })();
+
+  // ---------- 0d. Data saver ----------
+  // On mobile data with Data saver on: videos don't start by themselves (only after a tap or key press), videos
+  // load nothing until played, and the page's prefetch / preload hints are dropped. YouTube quality is lowered by the app.
+  (function () {
+    var on = false;
+    try { on = !!(B.dataSaver && B.dataSaver()); } catch (e) { /* older app */ }
+    if (!on) return;
+    var lastGesture = 0;
+    var GESTURE_MS = 5000;
+    ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(function (t) {
+      window.addEventListener(t, function (e) { if (e.isTrusted) lastGesture = Date.now(); }, true);
+    });
+    function userStarted() {
+      if (navigator.userActivation && navigator.userActivation.isActive) return true;
+      return Date.now() - lastGesture < GESTURE_MS;
+    }
+    document.addEventListener('play', function (e) {
+      var m = e.target;
+      if (m && m.pause && !userStarted()) m.pause();
+    }, true);
+    var HINTS = /(^|\s)(prefetch|prerender|preload|modulepreload)(\s|$)/i;
+    function tidy(root) {
+      var nodes = root.querySelectorAll ? root.querySelectorAll('link[rel], video, audio') : [];
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (n.tagName === 'LINK') { if (HINTS.test(n.getAttribute('rel') || '')) n.remove(); }
+        else if (n.preload !== 'none' && !n.autoplay) n.preload = 'none';
+      }
+    }
+    tidy(document);
+    new MutationObserver(function (list) {
+      list.forEach(function (r) { r.addedNodes.forEach(function (n) { if (n.nodeType === 1) { tidy(n); if (n.tagName === 'LINK' || n.tagName === 'VIDEO' || n.tagName === 'AUDIO') tidy({ querySelectorAll: function () { return [n]; } }); } }); });
+    }).observe(document, { childList: true, subtree: true });
+  })();
 
   // ---------- 0b. Full screen without a pause ----------
   // Going in or out of full screen, the WebView moves the video to another view and, for a moment, the page

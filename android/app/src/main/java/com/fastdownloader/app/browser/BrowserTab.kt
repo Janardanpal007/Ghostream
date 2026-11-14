@@ -85,6 +85,8 @@ class BrowserTab(
     /** Opening a page from [olderBack]: its WebView history is cleared once it loads, so Back goes further back. */
     internal var clearHistoryOnLoad = false
     var canForward by mutableStateOf(false)
+    /** The http:// address the HTTPS-only warning page is showing for, null when it isn't (see HttpsOnly). */
+    internal var interstitialFor: String? = null
     var blocked by mutableIntStateOf(0)
     /** What was blocked on this page (the first few hundred), for the Shields sheet. Never saved. */
     val blockedItems = mutableStateListOf<BlockedItem>()

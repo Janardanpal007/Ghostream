@@ -1,5 +1,6 @@
 package com.fastdownloader.app.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -93,6 +94,8 @@ fun SettingsScreen() {
                     TextSetting("Homepage (empty = start page)", s.homepageUrl) { v -> set { it.copy(homepageUrl = v.trim()) } }
                     Toggle("Reopen tabs on start", "The tabs you had open come back (private tabs never do)", s.restoreTabs) { v -> set { it.copy(restoreTabs = v) } }
                     Toggle("Desktop site for new tabs", "Ask sites for their computer layout", s.desktopMode) { v -> set { it.copy(desktopMode = v) } }
+                    Toggle("Dark pages", "Darken pages that have no dark theme when the app is dark", s.forceDarkPages) { v -> set { it.copy(forceDarkPages = v) } }
+                    Toggle("Data saver (on mobile data)", "Lower YouTube quality, no autoplay and no preloading on mobile data", s.dataSaver) { v -> set { it.copy(dataSaver = v) } }
                     Toggle("Detect file links", "Links to zip, apk, pdf and other files open the download panel", s.detectFileLinks) { v -> set { it.copy(detectFileLinks = v) } }
                     Toggle("Quick download", "Plain files from pages start without pressing Download", s.quickDownload, last = true) { v -> set { it.copy(quickDownload = v) } }
             }
@@ -112,6 +115,15 @@ fun SettingsScreen() {
                         Thread { runCatching { Filters.load(appCtx) } }.start() // rebuild the blocker with or without those lists
                     }
                     Toggle("Upgrade connections to HTTPS", "Falls back to http:// only when a site has no secure version", s.httpsUpgrade) { v -> set { it.copy(httpsUpgrade = v) } }
+                    Toggle("HTTPS-only mode", "Warns before opening a site that has no secure connection", s.httpsOnly) { v -> set { it.copy(httpsOnly = v) } }
+                    Toggle("Fingerprinting protection", "Hides canvas, graphics, audio and hardware details that sites use to recognise this phone", s.fingerprintProtection) { v -> set { it.copy(fingerprintProtection = v) } }
+                    val lockCtx = LocalContext.current
+                    Toggle("Lock private tabs", "Asks for your fingerprint or screen lock to open private tabs", s.lockPrivateTabs) { v ->
+                        if (v && !PrivateLock.available(lockCtx)) {
+                            Toast.makeText(lockCtx, "Set a screen lock in your phone's settings to use this", Toast.LENGTH_LONG).show()
+                        } else set { it.copy(lockPrivateTabs = v) }
+                    }
+                    Toggle("Clear data on exit", "Clear history, cookies and tabs when you leave", s.clearOnExit) { v -> set { it.copy(clearOnExit = v) } }
                     ChoiceList("Cookies", listOf("all" to "All", "block3p" to "No 3rd-party", "none" to "None"), s.cookiePolicy) { v -> set { it.copy(cookiePolicy = v) } }
                     val exceptions = (s.adblockAllow + s.popupAllow + s.httpsOffSites + s.scriptBlockSites + s.thirdPartyCookieSites).distinct()
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {

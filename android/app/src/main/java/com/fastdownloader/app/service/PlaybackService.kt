@@ -18,6 +18,9 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.fastdownloader.app.R
@@ -151,8 +154,21 @@ class PlaybackService : Service() {
             .setVisibility(if (private) Notification.VISIBILITY_PRIVATE else Notification.VISIBILITY_PUBLIC)
             .addAction(toggle)
             .addAction(action(ACTION_STOP, android.R.drawable.ic_menu_close_clear_cancel, "Stop", 4))
+            .addAction(downloadAction())
             .setStyle(Notification.MediaStyle().setMediaSession(session?.sessionToken).setShowActionsInCompactView(0))
             .build()
+    }
+
+    /**
+     * The Download button opens the app itself (an activity PendingIntent, which Android always allows from a
+     * notification), and MainActivity passes the request on through [downloadRequested].
+     */
+    private fun downloadAction(): Notification.Action {
+        val intent = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(EXTRA_DOWNLOAD_PLAYING, true)
+        val pending = PendingIntent.getActivity(this, DOWNLOAD_REQUEST, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.stat_sys_download), "Download", pending).build()
     }
 
     private fun service(action: String, code: Int): PendingIntent =
@@ -163,6 +179,9 @@ class PlaybackService : Service() {
 
     companion object {
         private const val TAG = "PlaybackService"
+        private const val DOWNLOAD_REQUEST = 5
+        /** On the intent the Download button opens MainActivity with. */
+        const val EXTRA_DOWNLOAD_PLAYING = "download_playing"
         private const val CHANNEL = "playback"
         private const val NOTIFICATION_ID = 7
         private const val ACTION_PLAY = "play"
@@ -174,6 +193,9 @@ class PlaybackService : Service() {
 
         @Volatile var running = false
             private set
+
+        /** Set by the notification's Download button; the Browser tab clears it once it has opened the download. */
+        var downloadRequested by mutableStateOf(false)
 
         /** Something started playing in the Browser tab. Started now, while the app is on screen, as Android requires. */
         fun start(ctx: Context) {

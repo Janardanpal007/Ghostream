@@ -158,7 +158,30 @@ object BrowserStore {
 
     // ---------- session and counters ----------
 
+    /** Set while the app is leaving with "clear on exit" on: nothing is written again until the app reopens. */
+    @Volatile private var wiped = false
+
+    /** The app opened again after a wipe (the process was kept): saving works as usual. */
+    fun resume() { wiped = false }
+
+    /** Forgets history and the saved tabs, in memory and on disk now. Bookmarks stay. */
+    @Synchronized
+    fun wipeAll() {
+        wiped = true
+        pending.values.forEach { it.cancel() }
+        pending.clear()
+        waiting.clear()
+        _history.value = emptyList()
+        session = Session()
+        if (!::dir.isInitialized) return
+        listOf("history.json", "session.json").forEach { name ->
+            val f = File(dir, name)
+            if (f.exists() && !f.delete()) android.util.Log.w("BrowserStore", "Could not delete $name")
+        }
+    }
+
     fun saveSession(s: Session) {
+        if (wiped) return
         session = s
         saveLater("session.json", 400) { json.encodeToString(Session.serializer(), s) }
     }
@@ -185,7 +208,7 @@ object BrowserStore {
      */
     @Synchronized
     private fun saveLater(name: String, delayMs: Long = 800, text: () -> String) {
-        if (!::dir.isInitialized) return
+        if (!::dir.isInitialized || wiped) return
         waiting[name] = text
         if (pending[name]?.isActive == true) return // it writes the newest content when it runs
         pending[name] = scope.launch {
@@ -207,6 +230,7 @@ object BrowserStore {
     }
 
     private fun write(name: String) {
+        if (wiped) return
         val text = synchronized(this) { waiting.remove(name) } ?: return
         val content = text()
         synchronized(this) {

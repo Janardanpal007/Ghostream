@@ -69,6 +69,14 @@ interface TabHost {
 
 private val MEDIA = Regex("""\.(m3u8|mpd|mp4|m4v|webm|mkv|mov|mp3|m4a|aac|ogg|opus|flac)(\?|#|$)""", RegexOption.IGNORE_CASE)
 
+/** YouTube's 480p level, what Data saver asks for on mobile data. */
+private const val DATA_SAVER_QUALITY = "large"
+
+/** Different on every run of the app: part of the fingerprint noise seed. */
+private val SESSION_SEED: String = java.util.UUID.randomUUID().toString()
+
+private fun dataSaverOn(): Boolean = Engine.settings.dataSaver && Engine.metered
+
 /** Sites whose https:// version failed this run: they're loaded over http:// as asked. */
 private val httpsFailed = java.util.Collections.synchronizedSet(HashSet<String>())
 
@@ -241,11 +249,28 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
     @JavascriptInterface
     fun youtubeQuality(): String {
         val settings = Engine.settings
+        if (dataSaverOn()) return DATA_SAVER_QUALITY
         return when (val choice = Turbo.youtubeChoice(if (Engine.metered) settings.youtubeQualityMobile else settings.youtubeQuality)) {
             "auto" -> ""
             "wifi" -> DeviceProfile.wifiQuality
             else -> choice
         }
+    }
+
+    /** Data saver is on and the phone is on mobile data (assets/page.js: no autoplay, no preloading). */
+    @JavascriptInterface
+    fun dataSaver(): Boolean = dataSaverOn()
+
+    /**
+     * A number that is the same for this site during this run of the app and different for every other site and run:
+     * the seed for fingerprint noise (assets/page.js, part 0c). "" when protection is off, or Shields are down for
+     * the site, so the page is left untouched.
+     */
+    @JavascriptInterface
+    fun fingerprintSeed(): String {
+        if (!Engine.settings.fingerprintProtection || !state.blocking()) return ""
+        val site = Omnibox.hostOf(state.topUrl)?.let { AdBlock.baseDomain(it) } ?: state.topUrl
+        return (SESSION_SEED + site).hashCode().toUInt().toString()
     }
 
     @JavascriptInterface
@@ -292,11 +317,27 @@ fun BrowserTab.applySitePolicy(url: String) {
     cookies.setAcceptCookie(s.cookiePolicy != "none")
     val thirdParty = s.cookiePolicy == "all" || (s.cookiePolicy != "none" && s.thirdPartyCookieSites.any { Omnibox.matchesSite(host, it) })
     cookies.setAcceptThirdPartyCookies(w, thirdParty)
+    applyDarkening(w)
+}
+
+/** Darkens pages that have no dark theme of their own when "Dark pages" is on and the app is dark. */
+@SuppressLint("RequiresFeature")
+private fun applyDarkening(w: WebView) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) return
+    val on = Engine.settings.forceDarkPages && appIsDark(w.context)
+    WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, on)
+}
+
+private fun appIsDark(ctx: Context): Boolean = when (Engine.settings.themeMode) {
+    "dark" -> true
+    "light" -> false
+    else -> ctx.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+        android.content.res.Configuration.UI_MODE_NIGHT_YES
 }
 
 private fun httpsAllowed(url: String): String? {
     val s = Engine.settings
-    if (!s.httpsUpgrade) return null
+    if (!s.httpsUpgrade && !s.httpsOnly) return null
     val host = Omnibox.hostOf(url) ?: return null
     if (host in httpsFailed || s.httpsOffSites.any { Omnibox.matchesSite(host, it) }) return null
     return Omnibox.httpsUpgradeOf(url)
@@ -310,6 +351,12 @@ fun BrowserTab.load(url: String) {
     val target = upgraded ?: url
     upgradedFrom = if (upgraded != null) url else null
     if (upgraded != null) BrowserStore.countHttpsUpgrade()
+    if (upgraded == null && HttpsOnly.needsWarning(url)) {
+        this.url = url
+        state.topUrl = url
+        HttpsOnly.show(this, w, url)
+        return
+    }
     applySitePolicy(target)
     if (target != this.url) clearPage()
     this.url = target
@@ -322,6 +369,7 @@ private fun BrowserTab.httpsFallback(view: WebView): Boolean {
     val original = upgradedFrom ?: return false
     upgradedFrom = null
     Omnibox.hostOf(original)?.let { httpsFailed += it }
+    if (HttpsOnly.needsWarning(original)) { HttpsOnly.show(this, view, original); return true }
     applySitePolicy(original)
     view.loadUrl(original)
     return true
@@ -425,6 +473,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val target = request.url.toString()
+            if (HttpsOnly.handleLink(tab, view, request.url) { dest -> applySitePolicy(dest); view.loadUrl(dest) }) return true
             if (Links.isMagnet(target)) { host.download(tab, AddRequest(target)); return true }
             if (request.url.scheme !in setOf("http", "https")) {
                 // intent:, market:, tel: and the like open in the app that handles them, when the user tapped.
@@ -482,6 +531,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                     return true
                 }
             }
+            if (HttpsOnly.needsWarning(dest)) { HttpsOnly.show(tab, view, dest); return true }
             applySitePolicy(dest)
             if (clean != null) { view.loadUrl(clean); return true }
             return false
@@ -506,7 +556,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             if (zoom != 100) applyZoom()
             if (!host.documentStart) view.evaluateJavascript(host.pageScript, null)
             view.title?.takeIf { it.isNotBlank() }?.let { title = it }
-            if (!private) BrowserStore.updateTitle(pageUrl, title)
+            if (!private && interstitialFor != pageUrl) BrowserStore.updateTitle(pageUrl, title)
             host.navigated(tab)
         }
 
@@ -517,7 +567,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             state.topUrl = pageUrl
             canBack = view.canGoBack()
             canForward = view.canGoForward()
-            if (!private && !isReload) BrowserStore.addVisit(pageUrl, view.title ?: "")
+            if (!private && !isReload && interstitialFor != pageUrl) BrowserStore.addVisit(pageUrl, view.title ?: "")
             host.navigated(tab)
         }
 
@@ -538,7 +588,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
         override fun onReceivedTitle(view: WebView, t: String?) {
             if (!t.isNullOrBlank()) {
                 title = t
-                if (!private) BrowserStore.updateTitle(url, t)
+                if (!private && interstitialFor != url) BrowserStore.updateTitle(url, t)
             }
         }
 

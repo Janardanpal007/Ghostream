@@ -89,6 +89,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        BrowserStore.resume()
         handle(intent)
         askNotificationsOnce()
         ContextCompat.registerReceiver(
@@ -128,6 +129,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(pipButtons) }
+        if (isFinishing && Engine.settings.clearOnExit) com.fastdownloader.app.browser.ClearOnExit.run(this)
         super.onDestroy()
     }
 
@@ -139,6 +141,12 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     /** Links shared from other apps, magnet links, .torrent files and selected text. */
     private fun handle(intent: Intent?) {
         intent ?: return
+        if (intent.getBooleanExtra(PlaybackService.EXTRA_DOWNLOAD_PLAYING, false)) {
+            tab = Tab.BROWSER
+            PlaybackService.downloadRequested = true
+            setIntent(Intent())
+            return
+        }
         val text = when (intent.action) {
             Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
             Intent.ACTION_PROCESS_TEXT -> intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
@@ -208,6 +216,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     /** Sign-ins, open tabs, history and bookmarks are written to disk now, so they're there even if Android ends the app. */
     override fun onStop() {
         super.onStop()
+        PrivateLock.relock()
         android.webkit.CookieManager.getInstance().flush()
         BrowserStore.flush()
     }
@@ -289,6 +298,7 @@ private fun Root(
                 },
             )
         }
+        PrivateLockGate(visible = tab == Tab.BROWSER)
         FullScreenLayer()
     }
 }
