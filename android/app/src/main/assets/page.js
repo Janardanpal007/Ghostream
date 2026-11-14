@@ -142,6 +142,45 @@
     }).observe(document, { childList: true, subtree: true });
   })();
 
+  // ---------- 0e. Spotify audio ads ----------
+  // Spotify's web player puts its ads in the play queue from its own servers, so blocking them breaks playback.
+  // Instead, while the player shows "Advertisement" (and Shields are up), the ad plays muted; sound comes back
+  // for the next song. (Speeding the ad up makes the player stall on the next song, so its speed is left alone.)
+  // Its players are never added to the page, so they're noted when they start playing.
+  if (location.hostname === 'open.spotify.com' && window.HTMLMediaElement) (function () {
+    var CHECK_MS = 400;
+    var players = new Set();
+    var origPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () { players.add(this); return origPlay.apply(this, arguments); };
+    var AD_XPATH = "//*[not(*)][normalize-space(text())='Advertisement']";
+    function adShowing() {
+      if (/^Advertisement\b/i.test(document.title)) return true;
+      try {
+        var r = document.evaluate(AD_XPATH, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+        for (var i = 0; i < r.snapshotLength; i++) if (r.snapshotItem(i).getClientRects().length) return true;
+      } catch (e) { /* no XPath here */ }
+      return false;
+    }
+    function shieldsUp() { try { return !!B.cosmeticBase(location.href); } catch (e) { return false; } }
+    var skipping = false;
+    setInterval(function () {
+      var ad = adShowing() && shieldsUp();
+      if (!ad && !skipping) return;
+      players.forEach(function (m) {
+        try {
+          if (ad) {
+            if (!m.__fdAd) m.__fdAd = { muted: m.muted };
+            m.muted = true;
+          } else if (m.__fdAd) {
+            m.muted = m.__fdAd.muted;
+            delete m.__fdAd;
+          }
+        } catch (e) { /* player gone */ }
+      });
+      skipping = ad;
+    }, CHECK_MS);
+  })();
+
   // ---------- 0b. Full screen without a pause ----------
   // Going in or out of full screen, the WebView moves the video to another view and, for a moment, the page
   // counts as hidden. YouTube unloads the video then (a black screen, paused). For 3 seconds after a page asks
