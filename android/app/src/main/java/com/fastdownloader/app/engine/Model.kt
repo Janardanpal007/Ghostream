@@ -112,7 +112,7 @@ data class Settings(
     /** Hides the details sites use to recognise this phone (canvas, WebGL, audio, hardware figures, battery). */
     val fingerprintProtection: Boolean = true,
     /** Private tabs open only after the fingerprint or screen lock. */
-    val lockPrivateTabs: Boolean = false,
+    val lockPrivateTabs: Boolean = true,
     /** Pages without a dark theme of their own are darkened when the app is dark. */
     val forceDarkPages: Boolean = false,
     /** On mobile data: lower YouTube quality, no autoplay, no preloading. */

@@ -25,14 +25,18 @@ class TabManager(private val ctx: Context, private val host: TabHost) {
     fun restore() {
         if (tabs.isNotEmpty()) return
         val session = BrowserStore.session
-        if (Engine.settings.restoreTabs && session.tabs.isNotEmpty()) {
+        if (Engine.settings.restoreTabs && (session.tabs.isNotEmpty() || session.privateTabs.isNotEmpty())) {
             session.tabs.forEach { t -> tabs += BrowserTab(nextId++, false, t.url, t.title, t.desktop).apply { olderBack = t.back } }
-            currentId = tabs[session.current.coerceIn(0, tabs.size - 1)].id
+            val normalCurrent = tabs.getOrNull(session.current.coerceIn(0, (tabs.size - 1).coerceAtLeast(0)))
+            val privates = session.privateTabs.map { t -> BrowserTab(nextId++, true, t.url, t.title, t.desktop).apply { olderBack = t.back } }
+            tabs += privates
+            currentId = (privates.getOrNull(session.currentPrivate) ?: normalCurrent ?: tabs.first()).id
+            if (tabs.none { !it.private }) open(startUrl(), private = false, select = false)
         } else {
             open(startUrl(), private = false)
         }
-        // A private profile left over from a crash.
-        PrivateProfile.wipe()
+        // Private cookies and site data stay while private tabs are open; otherwise it's a profile left over from a crash.
+        if (tabs.none { it.private }) PrivateProfile.wipe()
     }
 
     /** What new tabs open: the user's homepage, or the start page (""). */
@@ -98,10 +102,14 @@ class TabManager(private val ctx: Context, private val host: TabHost) {
     }
 
     fun save() {
-        val normal = tabs.filter { !it.private }
+        val (privates, normal) = tabs.partition { it.private }
         val cur = normal.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
-        BrowserStore.saveSession(Session(normal.map { SavedTab(if (it.home) "" else it.url, it.title, it.desktop, it.backUrls()) }, cur))
+        BrowserStore.saveSession(
+            Session(normal.map { it.saved() }, cur, privates.map { it.saved() }, privates.indexOfFirst { it.id == currentId }),
+        )
     }
+
+    private fun BrowserTab.saved() = SavedTab(if (home) "" else url, title, desktop, backUrls())
 
     fun destroyAll() {
         save()

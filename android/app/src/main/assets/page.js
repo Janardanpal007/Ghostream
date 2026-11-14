@@ -294,7 +294,16 @@
 
   // ---------- 1. element hiding ----------
   var style = null;
+  // Preferred: a constructed sheet in document.adoptedStyleSheets. Sites that rebuild <head> (Spotify, other
+  // React apps) delete an added <style> tag and every rule in it; an adopted sheet survives that. It's put back if
+  // the page replaces the adopted list.
+  var adopted = null;
+  try { if ('adoptedStyleSheets' in document && typeof CSSStyleSheet === 'function') adopted = new CSSStyleSheet(); } catch (e) { adopted = null; }
   function sheet() {
+    if (adopted) {
+      if (document.adoptedStyleSheets.indexOf(adopted) < 0) document.adoptedStyleSheets = document.adoptedStyleSheets.concat([adopted]);
+      return adopted;
+    }
     if (!style) {
       style = document.createElement('style');
       style.setAttribute('data-fd', '');
@@ -341,6 +350,7 @@
   }
   function flush() {
     timer = 0;
+    if (adopted) sheet(); // the page may have replaced its adopted sheets since
     if (!pending.length) return;
     var batch = pending.join(' ');
     pending = [];
@@ -348,7 +358,20 @@
   }
   function later() { if (!timer) timer = setTimeout(flush, 200); }
 
-  try { hide(B.cosmeticBase(location.href)); } catch (e) { /* bridge gone */ }
+  // A link can start the app and load its page before the blocker has finished loading (then the answer is
+  // empty). Ask again for a while; once it answers, look over the whole page again for site-specific rules.
+  var BASE_RETRIES = 20, BASE_RETRY_MS = 500;
+  function applyBase(tries) {
+    var text = '';
+    try { text = B.cosmeticBase(location.href); } catch (e) { return; } // bridge gone
+    if (text) {
+      hide(text);
+      if (tries > 0 && document.documentElement) { seen = Object.create(null); scan(document.documentElement); flush(); }
+    } else if (tries < BASE_RETRIES) {
+      setTimeout(function () { applyBase(tries + 1); }, BASE_RETRY_MS);
+    }
+  }
+  applyBase(0);
 
   // ---------- 1b. procedural hiding: "div:has-text(Sponsored):upward(2)", ":remove()", ":style()"… ----------
   var PROC_OP = /^:(has-text|-abp-contains|-abp-has|upward|nth-ancestor|remove|matches-css-before|matches-css-after|matches-css|min-text-length|xpath|matches-path|style)\(/;

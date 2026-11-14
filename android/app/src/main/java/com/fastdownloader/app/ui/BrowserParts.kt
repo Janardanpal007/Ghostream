@@ -413,7 +413,8 @@ private fun PrivateInfo() {
         Text("How private tabs work", style = Type.strong, color = c.privateFg)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Pages you open here aren't added to history or saved tabs. " + if (PrivateProfile.supported) {
+            "Pages you open here aren't added to history. Private tabs stay open until you close them, and open with your " +
+                "fingerprint or screen lock when that's on in Settings. " + if (PrivateProfile.supported) {
                 "Cookies, site data and cache are kept apart from normal tabs and erased when you close the last private tab."
             } else {
                 "This phone's Android System WebView is too old to keep private cookies apart from normal tabs: update it from the Play Store for full isolation."

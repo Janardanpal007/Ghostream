@@ -59,6 +59,9 @@ object Filters {
         "||snap.licdn.com/li.lms-analytics^", // LinkedIn Insight tag
         "||redditstatic.com/ads^", // Reddit Pixel
         "||admob.googleapis.com^", // AdMob
+        // Spotify's web player: the Premium offer card on Home and the "Open App" button.
+        "open.spotify.com##[data-testid=\"premium-banner\"]",
+        "open.spotify.com##button[data-testid=\"download-button\"]",
     )
 
     data class Status(val loading: Boolean = false, val networkRules: Int = 0, val cosmeticRules: Int = 0, val updatedAt: Long = 0, val message: String? = null)

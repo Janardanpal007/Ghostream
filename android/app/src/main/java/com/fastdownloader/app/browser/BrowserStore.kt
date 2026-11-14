@@ -23,7 +23,7 @@ data class Bookmark(val url: String, val title: String, val addedAt: Long = Syst
 @Serializable
 data class Visit(val url: String, val title: String, val at: Long = System.currentTimeMillis())
 
-/** An open tab as saved for the next start. Private tabs are never saved. */
+/** An open tab as saved for the next start (private tabs too, kept until the user closes them). */
 @Serializable
 data class SavedTab(
     val url: String,
@@ -34,7 +34,14 @@ data class SavedTab(
 )
 
 @Serializable
-data class Session(val tabs: List<SavedTab> = emptyList(), val current: Int = 0)
+data class Session(
+    val tabs: List<SavedTab> = emptyList(),
+    val current: Int = 0,
+    /** Open private tabs: they stay until the user closes them, like normal tabs (behind the lock, if it's on). */
+    val privateTabs: List<SavedTab> = emptyList(),
+    /** Index in [privateTabs] of the tab on screen, or -1 when a normal tab was on screen. */
+    val currentPrivate: Int = -1,
+)
 
 /** Totals for the start page since the app opened (not saved: they start at 0 each time). */
 @Serializable
