@@ -385,7 +385,7 @@ fun HomePage(private: Boolean, onOpen: (String) -> Unit, onSearch: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(22.dp))
-                SiteGrid("Quick links", QUICK_LINKS, onOpen)
+                SpeedDialGrid(onOpen)
                 if (settings.showTopSites && top.isNotEmpty()) {
                     Spacer(Modifier.height(18.dp))
                     SiteGrid("Top sites", top.map { it.title to it.url }, onOpen)
@@ -399,14 +399,6 @@ fun HomePage(private: Boolean, onOpen: (String) -> Unit, onSearch: () -> Unit) {
         }
     }
 }
-
-/** Sites always shown on the start page, above the most visited ones. */
-private val QUICK_LINKS = listOf(
-    "Google" to "https://www.google.com/",
-    "YouTube" to "https://m.youtube.com/",
-    "JioSaavn" to "https://www.jiosaavn.com/",
-    "SoundCloud" to "https://m.soundcloud.com/",
-)
 
 private fun duration(seconds: Long): String = when {
     seconds < 60 -> "${seconds}s"

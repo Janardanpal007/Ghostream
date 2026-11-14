@@ -66,6 +66,9 @@ object BrowserStore {
     val history: StateFlow<List<Visit>> = _history.asStateFlow()
     private val _stats = MutableStateFlow(BrowserStats())
     val stats: StateFlow<BrowserStats> = _stats.asStateFlow()
+    private val _speedDials = MutableStateFlow<List<Bookmark>>(emptyList())
+    /** The start page's Speed Dial tiles, in the order shown. */
+    val speedDials: StateFlow<List<Bookmark>> = _speedDials.asStateFlow()
     var session = Session()
         private set
 
@@ -73,10 +76,47 @@ object BrowserStore {
         if (::dir.isInitialized) return
         dir = File(ctx.filesDir, "browser").apply { mkdirs() }
         _bookmarks.value = read("bookmarks.json", ListSerializer(Bookmark.serializer())) ?: emptyList()
+        _speedDials.value = read("speeddial.json", ListSerializer(Bookmark.serializer())) ?: DEFAULT_SPEED_DIALS
         _history.value = read("history.json", ListSerializer(Visit.serializer())) ?: emptyList()
         // The blocked count is for this run of the app: it starts at 0 each time the app opens (older versions kept it).
         File(dir, "stats.json").delete()
         session = read("session.json", Session.serializer()) ?: Session()
+    }
+
+    // ---------- speed dial ----------
+
+    private val DEFAULT_SPEED_DIALS = listOf(
+        Bookmark("https://www.google.com/", "Google", 0),
+        Bookmark("https://m.youtube.com/", "YouTube", 0),
+        Bookmark("https://www.jiosaavn.com/", "JioSaavn", 0),
+        Bookmark("https://m.soundcloud.com/", "SoundCloud", 0),
+    )
+
+    /** Adds a tile at the end; false when that address is already on the Speed Dial. */
+    fun addSpeedDial(url: String, title: String): Boolean {
+        if (_speedDials.value.any { it.url == url }) return false
+        setSpeedDials(_speedDials.value + Bookmark(url, title.ifBlank { url }))
+        return true
+    }
+
+    fun removeSpeedDial(url: String) = setSpeedDials(_speedDials.value.filterNot { it.url == url })
+
+    fun renameSpeedDial(url: String, title: String) =
+        setSpeedDials(_speedDials.value.map { if (it.url == url) it.copy(title = title.ifBlank { it.title }) else it })
+
+    /** Moves a tile [by] places (negative: towards the start), staying inside the list. */
+    fun moveSpeedDial(url: String, by: Int) {
+        val list = _speedDials.value
+        val from = list.indexOfFirst { it.url == url }
+        if (from < 0) return
+        val to = (from + by).coerceIn(0, list.lastIndex)
+        if (to == from) return
+        setSpeedDials(list.toMutableList().apply { add(to, removeAt(from)) })
+    }
+
+    private fun setSpeedDials(list: List<Bookmark>) {
+        _speedDials.value = list
+        saveLater("speeddial.json") { json.encodeToString(ListSerializer(Bookmark.serializer()), _speedDials.value) }
     }
 
     // ---------- bookmarks ----------
