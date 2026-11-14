@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
 import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -628,6 +629,13 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             if (!dialogFlood()) return false
             result.cancel()
             return true
+        }
+
+        // Protected (DRM) music and video — Spotify, Netflix, Prime Video — need Widevine, which WebView refuses
+        // unless the app allows it. Only that is allowed; camera, microphone and the rest stay refused.
+        override fun onPermissionRequest(request: PermissionRequest) {
+            val drm = PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID
+            if (drm in request.resources) request.grant(arrayOf(drm)) else request.deny()
         }
 
         // A page opening a new window. A link the user tapped opens in a new tab. Windows a page opens by itself,
