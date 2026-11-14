@@ -384,8 +384,10 @@ fun HomePage(private: Boolean, onOpen: (String) -> Unit, onSearch: () -> Unit) {
                         Stat("Time saved (est.)", duration(stats.blocked * 50 / 1000), c.accent2, Modifier.weight(1f))
                     }
                 }
+                Spacer(Modifier.height(22.dp))
+                SiteGrid("Quick links", QUICK_LINKS, onOpen)
                 if (settings.showTopSites && top.isNotEmpty()) {
-                    Spacer(Modifier.height(22.dp))
+                    Spacer(Modifier.height(18.dp))
                     SiteGrid("Top sites", top.map { it.title to it.url }, onOpen)
                 }
                 if (bookmarks.isNotEmpty()) {
@@ -397,6 +399,14 @@ fun HomePage(private: Boolean, onOpen: (String) -> Unit, onSearch: () -> Unit) {
         }
     }
 }
+
+/** Sites always shown on the start page, above the most visited ones. */
+private val QUICK_LINKS = listOf(
+    "Google" to "https://www.google.com/",
+    "YouTube" to "https://m.youtube.com/",
+    "JioSaavn" to "https://www.jiosaavn.com/",
+    "SoundCloud" to "https://m.soundcloud.com/",
+)
 
 private fun duration(seconds: Long): String = when {
     seconds < 60 -> "${seconds}s"
@@ -463,7 +473,8 @@ private fun SiteGrid(title: String, sites: List<Pair<String, String>>, onOpen: (
 /** A site's first letter on a colour made from its name (no icon is fetched, so nothing leaks to the site). */
 @Composable
 fun SiteAvatar(url: String, size: Dp) {
-    val host = Omnibox.displayHost(url)
+    // Mobile sites (m.youtube.com) take the letter of the site, not of "m.".
+    val host = Omnibox.displayHost(url).removePrefix("m.")
     val hues = listOf(0xFF1D7FE6, 0xFF7C5CFF, 0xFF138A43, 0xFFE0592A, 0xFFC2185B, 0xFF00838F, 0xFF6D4C41, 0xFF5E35B1)
     val color = Color(hues[(host.hashCode() and 0x7fffffff) % hues.size])
     Box(Modifier.size(size).clip(Shape.control).background(color), contentAlignment = Alignment.Center) {
