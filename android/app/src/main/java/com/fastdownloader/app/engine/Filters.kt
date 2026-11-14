@@ -64,6 +64,8 @@ object Filters {
         "open.spotify.com##button[data-testid=\"download-button\"]",
         // JioSaavn: the "Start JioSaavn Pro free trial" bar above the bottom menu.
         "jiosaavn.com##.c-banner",
+        // SoundCloud mobile site: the "Get the SoundCloud app" cards (class names carry a build hash, so match the start).
+        "m.soundcloud.com##div[class*=\"Me_CtaContainer__\"]",
     )
 
     data class Status(val loading: Boolean = false, val networkRules: Int = 0, val cosmeticRules: Int = 0, val updatedAt: Long = 0, val message: String? = null)
