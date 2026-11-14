@@ -115,6 +115,8 @@ data class Settings(
     val autoLandscape: Boolean = true,
     /** Leaving the app during a full-screen video keeps it playing in a small window. */
     val autoPip: Boolean = true,
+    /** Videos and music keep playing with the screen off or another app open (see PlaybackService). */
+    val backgroundPlay: Boolean = true,
     /** YouTube picture quality on Wi-Fi: "wifi" (the best 1080p-or-lower the phone decodes), "highest", "hd1440", "hd1080", "hd720" or "auto". */
     val youtubeQuality: String = "wifi",
     /** YouTube picture quality on mobile data: "hd1440", "hd1080", "hd720" (default), "highest" or "auto". */

@@ -29,6 +29,7 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.fastdownloader.app.BuildConfig
 import com.fastdownloader.app.engine.AdBlock
+import com.fastdownloader.app.service.PlaybackService
 import com.fastdownloader.app.engine.Categories
 import com.fastdownloader.app.engine.DeviceProfile
 import com.fastdownloader.app.engine.Engine
@@ -218,11 +219,19 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
 
     @JavascriptInterface
     fun playing(on: Boolean) {
-        main.post { tab.playing = on }
+        main.post {
+            tab.playing = on
+            // Started while the app is on screen (Android doesn't allow it later), so it can keep playing after.
+            if (on && Engine.settings.backgroundPlay) tab.web?.context?.let { PlaybackService.start(it) }
+        }
     }
 
     @JavascriptInterface
     fun hideShorts(): Boolean = Engine.settings.hideShorts
+
+    /** Whether a playing video or song should keep playing when the app leaves the screen (assets/page.js, part 0b). */
+    @JavascriptInterface
+    fun backgroundPlay(): Boolean = Engine.settings.backgroundPlay
 
     /** YouTube ad removal is part of ad blocking: off when Shields are down for the site. */
     @JavascriptInterface
@@ -318,12 +327,23 @@ private fun BrowserTab.httpsFallback(view: WebView): Boolean {
     return true
 }
 
+/**
+ * A WebView that keeps playing when the app leaves the screen or the screen turns off. Chromium pauses and unloads
+ * a video once its window is hidden; while [keepPlaying] is true, the window is reported as still visible
+ * (PlaybackService keeps the app running meanwhile).
+ */
+private class KeepPlayingWebView(ctx: Context, private val keepPlaying: () -> Boolean) : WebView(ctx) {
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(if (visibility != View.VISIBLE && keepPlaying()) View.VISIBLE else visibility)
+    }
+}
+
 @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility", "RequiresFeature")
 fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
     web?.let { return it }
     if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
     val tab = this
-    val w = WebView(ctx)
+    val w = KeepPlayingWebView(ctx) { Engine.settings.backgroundPlay && tab.playing }
     // A private tab's profile must be set before anything else touches the WebView.
     if (private && PrivateProfile.supported) {
         PrivateProfile.cookies() // creates the profile if needed

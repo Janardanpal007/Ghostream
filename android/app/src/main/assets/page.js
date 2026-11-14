@@ -18,11 +18,19 @@
   // ---------- 0b. Full screen without a pause ----------
   // Going in or out of full screen, the WebView moves the video to another view and, for a moment, the page
   // counts as hidden. YouTube unloads the video then (a black screen, paused). For 3 seconds after a page asks
-  // for full screen or leaves it, the page stays "visible". Leaving the app is not affected.
+  // for full screen or leaves it, the page stays "visible". With background play on (the default), it also stays
+  // "visible" while a video or song plays, so leaving the app or turning the screen off doesn't pause it.
   (function () {
     var holdUntil = 0;
+    var bgPlay = false;
+    try { bgPlay = !!B.backgroundPlay(); } catch (e) { /* older app */ }
     function hold() { holdUntil = Date.now() + 3000; }
-    function held() { return Date.now() < holdUntil; }
+    function mediaPlaying() {
+      var ms = document.querySelectorAll('video, audio');
+      for (var i = 0; i < ms.length; i++) if (!ms[i].paused && !ms[i].ended) return true;
+      return false;
+    }
+    function held() { return Date.now() < holdUntil || (bgPlay && mediaPlaying()); }
     function wrap(proto, name) {
       var f = proto && proto[name];
       if (typeof f !== 'function') return;

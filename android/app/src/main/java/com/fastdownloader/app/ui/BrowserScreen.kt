@@ -101,6 +101,8 @@ object BrowserChrome {
     var playing = false
     /** The WebView on screen, for the video controls. */
     var activeWeb: WebView? = null
+    /** The tab on screen is private: background playback shows no title or site for it. */
+    var activePrivate = false
     /** A link another app asked to open: shown in a new tab. */
     var openUrl by mutableStateOf<String?>(null)
     /** Set by MainActivity: shows the system file picker for a page's upload button. */
@@ -199,6 +201,7 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
     val tab = manager.current
     val web = tab?.takeIf { !it.home }?.web
     BrowserChrome.activeWeb = web
+    BrowserChrome.activePrivate = tab?.private == true
     BrowserChrome.playing = visible && tab?.playing == true
     val barColor = if (tab == null || !visible || BrowserChrome.videoMode || BrowserChrome.pip || editing) null
         else if (tab.private) colors.privateBg else colors.panel

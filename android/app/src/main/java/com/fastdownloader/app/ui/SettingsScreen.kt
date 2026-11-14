@@ -175,7 +175,8 @@ fun SettingsScreen() {
                     ) { v -> set { it.copy(youtubeQualityMobile = v) } }
                     ChoiceList("Full-screen shape", VideoCtl.FITS, s.videoFit) { v -> set { it.copy(videoFit = v) } }
                     Toggle("Turn sideways for full screen", "Upright videos stay upright", s.autoLandscape) { v -> set { it.copy(autoLandscape = v) } }
-                    Toggle("Picture-in-picture", "Leaving the app while a video plays keeps it playing in a small window", s.autoPip, last = true) { v -> set { it.copy(autoPip = v) } }
+                    Toggle("Picture-in-picture", "Leaving the app while a video plays keeps it playing in a small window", s.autoPip) { v -> set { it.copy(autoPip = v) } }
+                    Toggle("Play in the background", "Videos and music keep playing with the screen off or in another app", s.backgroundPlay, last = true) { v -> set { it.copy(backgroundPlay = v) } }
             }
             Section("Video downloads") {
                     Choice("Video format", listOf("mp4" to "MP4", "mkv" to "MKV"), s.videoContainer) { v -> set { it.copy(videoContainer = v) } }

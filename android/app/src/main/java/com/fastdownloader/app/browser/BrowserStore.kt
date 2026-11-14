@@ -36,7 +36,7 @@ data class SavedTab(
 @Serializable
 data class Session(val tabs: List<SavedTab> = emptyList(), val current: Int = 0)
 
-/** Totals for the start page. */
+/** Totals for the start page since the app opened (not saved: they start at 0 each time). */
 @Serializable
 data class BrowserStats(val blocked: Long = 0, val httpsUpgrades: Long = 0)
 
@@ -50,6 +50,8 @@ object BrowserStore {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var dir: File
     private val pending = HashMap<String, Job>()
+    // The newest content waiting to be written, per file.
+    private val waiting = HashMap<String, () -> String>()
 
     private val _bookmarks = MutableStateFlow<List<Bookmark>>(emptyList())
     val bookmarks: StateFlow<List<Bookmark>> = _bookmarks.asStateFlow()
@@ -65,7 +67,8 @@ object BrowserStore {
         dir = File(ctx.filesDir, "browser").apply { mkdirs() }
         _bookmarks.value = read("bookmarks.json", ListSerializer(Bookmark.serializer())) ?: emptyList()
         _history.value = read("history.json", ListSerializer(Visit.serializer())) ?: emptyList()
-        _stats.value = read("stats.json", BrowserStats.serializer()) ?: BrowserStats()
+        // The blocked count is for this run of the app: it starts at 0 each time the app opens (older versions kept it).
+        File(dir, "stats.json").delete()
         session = read("session.json", Session.serializer()) ?: Session()
     }
 
@@ -162,12 +165,10 @@ object BrowserStore {
 
     fun countBlocked(n: Int = 1) {
         _stats.update { it.copy(blocked = it.blocked + n) }
-        saveLater("stats.json", 3000) { json.encodeToString(BrowserStats.serializer(), _stats.value) }
     }
 
     fun countHttpsUpgrade() {
         _stats.update { it.copy(httpsUpgrades = it.httpsUpgrades + 1) }
-        saveLater("stats.json", 3000) { json.encodeToString(BrowserStats.serializer(), _stats.value) }
     }
 
     // ---------- files ----------
@@ -178,21 +179,42 @@ object BrowserStore {
         return runCatching { json.decodeFromString(serializer, f.readText()) }.getOrNull()
     }
 
-    /** Several quick changes are written once. */
+    /**
+     * Several quick changes are written once, at most [delayMs] after the first. The wait isn't restarted by later
+     * changes: a page blocking a tracker every second would otherwise put the save off until the app is closed.
+     */
     @Synchronized
     private fun saveLater(name: String, delayMs: Long = 800, text: () -> String) {
         if (!::dir.isInitialized) return
-        pending[name]?.cancel()
+        waiting[name] = text
+        if (pending[name]?.isActive == true) return // it writes the newest content when it runs
         pending[name] = scope.launch {
             delay(delayMs)
-            val content = text()
-            synchronized(this@BrowserStore) {
-                val tmp = File(dir, "$name.tmp")
-                tmp.writeText(content)
-                if (!tmp.renameTo(File(dir, name))) {
-                    File(dir, name).delete()
-                    tmp.renameTo(File(dir, name))
-                }
+            synchronized(this@BrowserStore) { pending.remove(name) } // changes from here on get a save of their own
+            write(name)
+        }
+    }
+
+    /** Writes everything still waiting now: the app is leaving the screen, and Android may end it without warning. */
+    fun flush() {
+        if (!::dir.isInitialized) return
+        val names = synchronized(this) {
+            pending.values.forEach { it.cancel() }
+            pending.clear()
+            waiting.keys.toList()
+        }
+        scope.launch { names.forEach { write(it) } }
+    }
+
+    private fun write(name: String) {
+        val text = synchronized(this) { waiting.remove(name) } ?: return
+        val content = text()
+        synchronized(this) {
+            val tmp = File(dir, "$name.tmp")
+            tmp.writeText(content)
+            if (!tmp.renameTo(File(dir, name))) {
+                File(dir, name).delete()
+                tmp.renameTo(File(dir, name))
             }
         }
     }
