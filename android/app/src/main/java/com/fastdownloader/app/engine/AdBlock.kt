@@ -20,7 +20,7 @@ package com.fastdownloader.app.engine
  *
  * Plain Kotlin (no Android classes), so it can be unit-tested on the PC.
  */
-class AdBlock private constructor() {
+class AdBlock internal constructor() {
 
     /** Resource type of a request, for rules like $script or $image. */
     enum class Type(val bit: Int) {
@@ -28,7 +28,7 @@ class AdBlock private constructor() {
         XHR(128), WEBSOCKET(256), PING(512), POPUP(1024), OTHER(2048), OBJECT(4096),
     }
 
-    private class NetRule(
+    internal class NetRule(
         val pattern: String,
         val types: Int, // 0 = every type except POPUP and DOCUMENT
         val notTypes: Int,
@@ -37,14 +37,15 @@ class AdBlock private constructor() {
         val notDomains: Array<String>?,
         val important: Boolean,
         val redirect: String? = null, // stand-in resource name from $redirect= / $redirect-rule=
-        regex: Regex? = null, // "/…/" rules, compiled and checked when parsed
+        regex: Regex? = null, // "/…/" rules, compiled when parsed
+        val regexSource: String? = null, // the "/…/" body: lets a restored rule compile its regex only when first needed
     ) {
         private var compiled: Regex? = regex
         private val pureHost = pattern.isEmpty() // matched by host index alone
 
         fun matchesUrl(url: String): Boolean {
             if (pureHost) return true
-            val re = compiled ?: toRegex(pattern).also { compiled = it }
+            val re = compiled ?: (regexSource?.let { Regex(it, RegexOption.IGNORE_CASE) } ?: toRegex(pattern)).also { compiled = it }
             return re.containsMatchIn(url)
         }
 
@@ -61,52 +62,52 @@ class AdBlock private constructor() {
     }
 
     // Network rules: plain "||host^" rules by host; the rest by their most distinctive word.
-    private val blockHosts = HashMap<String, MutableList<NetRule>>()
+    internal val blockHosts = HashMap<String, MutableList<NetRule>>()
     // Plain "||host^" block rules with no options (most of the hosts lists): just the host, no rule object or list,
     // which keeps the 200k-odd of them small and quick to load. They all stand for [plainRule].
-    private val plainHosts = HashSet<String>()
-    private val plainRule = NetRule("", 0, 0, 0, null, null, false)
+    internal val plainHosts = HashSet<String>()
+    internal val plainRule = NetRule("", 0, 0, 0, null, null, false)
     // Host lists made for DNS blocking (AdGuard DNS filter). Their "@@" exceptions keep ad click-throughs and app
     // back-ends working at the DNS level; they undo only that list's own blocks, never what the browser lists block.
-    private val dnsHosts = HashSet<String>()
-    private val dnsAllow = HashSet<String>()
-    private val allowHosts = HashMap<String, MutableList<NetRule>>()
-    private val blockTokens = HashMap<String, MutableList<NetRule>>()
-    private val allowTokens = HashMap<String, MutableList<NetRule>>()
+    internal val dnsHosts = HashSet<String>()
+    internal val dnsAllow = HashSet<String>()
+    internal val allowHosts = HashMap<String, MutableList<NetRule>>()
+    internal val blockTokens = HashMap<String, MutableList<NetRule>>()
+    internal val allowTokens = HashMap<String, MutableList<NetRule>>()
 
     // $redirect / $redirect-rule: what to answer a blocked request with, instead of nothing.
-    private val redirectHosts = HashMap<String, MutableList<NetRule>>()
-    private val redirectTokens = HashMap<String, MutableList<NetRule>>()
+    internal val redirectHosts = HashMap<String, MutableList<NetRule>>()
+    internal val redirectTokens = HashMap<String, MutableList<NetRule>>()
 
     // $removeparam: query parameters to strip from page addresses ([name] "" and no [regex] = all of them).
-    private class ParamRule(val rule: NetRule, val name: String, val regex: Regex?)
-    private val paramRules = ArrayList<ParamRule>()
+    internal class ParamRule(val rule: NetRule, val name: String, val regex: Regex?)
+    internal val paramRules = ArrayList<ParamRule>()
 
     // Whole-page exceptions (@@…$document, $elemhide, $generichide).
-    private val docAllow = mutableListOf<Pair<NetRule, Int>>()
+    internal val docAllow = mutableListOf<Pair<NetRule, Int>>()
 
     // Element hiding.
-    private val genericByToken = HashMap<String, MutableList<String>>() // ".ad" / "#banner" → selectors
-    private val genericHigh = mutableListOf<String>() // generic selectors not starting with an id or class
-    private val genericAllow = HashSet<String>()
-    private val specific = HashMap<String, MutableList<String>>() // host or "name.*" → selectors
-    private val specificAllow = HashMap<String, MutableSet<String>>()
+    internal val genericByToken = HashMap<String, MutableList<String>>() // ".ad" / "#banner" → selectors
+    internal val genericHigh = mutableListOf<String>() // generic selectors not starting with an id or class
+    internal val genericAllow = HashSet<String>()
+    internal val specific = HashMap<String, MutableList<String>>() // host or "name.*" → selectors
+    internal val specificAllow = HashMap<String, MutableSet<String>>()
 
     // Procedural element hiding (":has-text()", ":upward()", ":remove()"…), run by assets/page.js. Site-specific only.
-    private val procedural = HashMap<String, MutableList<String>>()
-    private val proceduralAllow = HashMap<String, MutableSet<String>>()
+    internal val procedural = HashMap<String, MutableList<String>>()
+    internal val proceduralAllow = HashMap<String, MutableSet<String>>()
 
     // Scriptlets: host or "name.*" → scriptlets for it; exceptions by host ("" = everywhere).
-    private class Scriptlet(val key: String, val args: List<String>, val notDomains: List<String>)
-    private val scriptlets = HashMap<String, MutableList<Scriptlet>>()
-    private val scriptletAllow = HashMap<String, MutableSet<String>>()
+    internal class Scriptlet(val key: String, val args: List<String>, val notDomains: List<String>)
+    internal val scriptlets = HashMap<String, MutableList<Scriptlet>>()
+    internal val scriptletAllow = HashMap<String, MutableSet<String>>()
 
     var networkRules = 0
-        private set
+        internal set
     var cosmeticRules = 0
-        private set
+        internal set
     var scriptletRules = 0
-        private set
+        internal set
 
     // ---------------- matching ----------------
 
@@ -503,7 +504,7 @@ class AdBlock private constructor() {
         if (regexBody != null) {
             if (pageFlag != 0) return // whole-page exceptions by regex: too rare to be worth it
             val re = runCatching { Regex(regexBody, RegexOption.IGNORE_CASE) }.getOrNull() ?: return
-            val rule = NetRule(r, types, notTypes, party, domains, notDomains, important, redirect, re)
+            val rule = NetRule(r, types, notTypes, party, domains, notDomains, important, redirect, re, regexBody)
             networkRules++
             // Filed under a word every match must contain; failing that, checked for every request.
             val token = regexToken(regexBody) ?: ""

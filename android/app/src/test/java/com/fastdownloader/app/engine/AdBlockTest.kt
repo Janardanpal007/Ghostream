@@ -300,4 +300,68 @@ class AdBlockTest {
         println("One check takes about $perCheckUs µs")
         assertTrue(perCheckUs < 1000)
     }
+
+    // ---------------- snapshot ----------------
+
+    private val snapshotRules = listOf(
+        "||ads.example^", "0.0.0.0 tracker.test", "/banner/*/ad_", "||cdn.example.com/ads/\$script,third-party",
+        "|https://x.test/ad.js|", "||pix.test^\$image,domain=news.example.com|~safe.news.example.com",
+        "/\\/track\\d+\\.js/","||metrics.test/c.js\$redirect=noopjs", "@@||ads.example/ok^", "||imp.test^\$important",
+        "@@||example.org^\$document", "||p.test^\$removeparam=utm_x", "||q.test^\$removeparam=/^zz_/",
+        "##.ad-box", "example.com##.banner", "example.*##.entity", "#@#.ad-box", "news.example.com#@#.banner",
+        "example.com##div:has-text(Sponsored):upward(2)", "example.com##+js(set, ads.enabled, false)",
+        "~skip.example.com,example.com##+js(aopr, adsbygoogle)", "example.com#@#+js(aopr, adsbygoogle)",
+    )
+    private val snapshotDns = listOf("||dns-ad.test^\n@@||ok.dns-ad.test^\n||other.dns-ad.test^|")
+
+    private fun roundTrip(a: AdBlock): AdBlock {
+        val bytes = java.io.ByteArrayOutputStream().also { AdBlockSnapshot.write(a, "key", it) }.toByteArray()
+        return requireNotNull(AdBlockSnapshot.read(bytes.inputStream(), "key"))
+    }
+
+    /** Asserts that [b] gives the same answers as [a] for a spread of requests and pages. */
+    private fun assertSameAnswers(a: AdBlock, b: AdBlock, urls: List<String>, pages: List<String>) {
+        assertEquals(a.networkRules, b.networkRules)
+        assertEquals(a.cosmeticRules, b.cosmeticRules)
+        assertEquals(a.scriptletRules, b.scriptletRules)
+        for (u in urls) for (t in Type.values()) for (p in pages) {
+            assertEquals("$u $t on $p", a.blockOrRedirect(u, p, t), b.blockOrRedirect(u, p, t))
+        }
+        for (p in pages) {
+            assertEquals(p, a.cosmeticBase(p), b.cosmeticBase(p))
+            assertEquals(p, a.cosmeticFor(p, "ad-box entity banner"), b.cosmeticFor(p, "ad-box entity banner"))
+            assertEquals(p, a.proceduralFor(p), b.proceduralFor(p))
+            assertEquals(p, a.scriptletsFor(p), b.scriptletsFor(p))
+            assertEquals(p, a.pageFlags(p), b.pageFlags(p))
+        }
+        for (u in urls) assertEquals(u, a.cleanUrl("$u?utm_x=1&zz_a=2&k=3"), b.cleanUrl("$u?utm_x=1&zz_a=2&k=3"))
+    }
+
+    @Test
+    fun anEngineRestoredFromASnapshotAnswersLikeTheParsedOne() {
+        val a = AdBlock.parse(listOf(snapshotRules.joinToString("\n")), snapshotDns)
+        val urls = listOf(
+            "https://ads.example/x.js", "https://ads.example/ok", "https://cdn.ads.example/a.png", "https://tracker.test/p",
+            "https://site.org/banner/1/ad_top.gif", "https://cdn.example.com/ads/1.js", "https://x.test/ad.js",
+            "https://pix.test/i.gif", "https://site.org/track42.js", "https://metrics.test/c.js", "https://imp.test/a",
+            "https://dns-ad.test/", "https://ok.dns-ad.test/", "https://other.dns-ad.test/", "https://q.test/", "https://p.test/",
+            "https://fine.example.net/page",
+        )
+        val pages = listOf(
+            "https://news.example.com/a", "https://safe.news.example.com/a", "https://example.com/", "https://www.example.co.uk/",
+            "https://example.org/", "https://skip.example.com/", "https://other.net/",
+        )
+        assertSameAnswers(a, roundTrip(a), urls, pages)
+    }
+
+    @Test
+    fun aSnapshotWrittenUnderAnotherKeyOrCorruptIsRefused() {
+        val a = AdBlock.parse(listOf("||ads.example^"))
+        val bytes = java.io.ByteArrayOutputStream().also { AdBlockSnapshot.write(a, "one", it) }.toByteArray()
+        assertNull(AdBlockSnapshot.read(bytes.inputStream(), "two"))
+        val broken = bytes.copyOf(bytes.size / 2)
+        val failed = runCatching { AdBlockSnapshot.read(broken.inputStream(), "one") }.isFailure
+        assertTrue(failed)
+        assertTrue(runCatching { AdBlockSnapshot.read(ByteArray(8).inputStream(), "one") }.isFailure)
+    }
 }

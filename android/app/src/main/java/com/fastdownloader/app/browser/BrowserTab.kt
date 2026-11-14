@@ -20,6 +20,20 @@ import com.fastdownloader.app.engine.Engine
 /** A video or audio file the page loaded. */
 data class Media(val url: String, val kind: String, val referer: String)
 
+/** Why something was blocked, shown in the Shields sheet. */
+enum class BlockKind(val label: String) {
+    AD("Ad or tracker"),
+    POPUP("Pop-up"),
+    REDIRECT("Redirect"),
+    OTHER("Other"),
+}
+
+/** One blocked item: the site it came from (or was headed to) and what kind of block it was. */
+data class BlockedItem(val host: String, val kind: BlockKind)
+
+/** Most blocked items remembered per page; the count keeps going past it. */
+private const val MAX_BLOCKED_ITEMS = 300
+
 /** What the WebView's background threads need to know about the tab's page. */
 class PageState {
     @Volatile var topUrl: String = ""
@@ -72,6 +86,16 @@ class BrowserTab(
     internal var clearHistoryOnLoad = false
     var canForward by mutableStateOf(false)
     var blocked by mutableIntStateOf(0)
+    /** What was blocked on this page (the first few hundred), for the Shields sheet. Never saved. */
+    val blockedItems = mutableStateListOf<BlockedItem>()
+
+    /** Counts one blocked item for this page and remembers its host. Call on the main thread. */
+    fun recordBlock(url: String, kind: BlockKind) {
+        blocked++
+        if (blockedItems.size >= MAX_BLOCKED_ITEMS) return
+        val host = AdBlock.hostOf(url.lowercase()) ?: url.ifEmpty { "(unknown)" }
+        blockedItems.add(BlockedItem(host, kind))
+    }
     /** The last pop-up this page was stopped from opening, for the "Pop-up blocked" bar ("" = address unknown). */
     var blockedPopup by mutableStateOf<String?>(null)
     var desktop by mutableStateOf(desktop)
@@ -161,6 +185,7 @@ class BrowserTab(
         videosByFrame.clear()
         playing = false
         blocked = 0
+        blockedItems.clear()
         blockedPopup = null
         offerSave()
         loginForm = ""

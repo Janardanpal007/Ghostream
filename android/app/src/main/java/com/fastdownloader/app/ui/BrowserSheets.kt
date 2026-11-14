@@ -262,6 +262,7 @@ fun ShieldsSheet(tab: BrowserTab, host: String, onDismiss: () -> Unit, onSetting
         }
         Divider()
         Column(Modifier.verticalScroll(rememberScrollState())) {
+            if (!tab.home) { BlockedList(tab); Divider() }
             SheetRow(
                 Icons.Shield, if (site) "Block trackers & ads" else "Block trackers & ads on every site",
                 "uBlock Origin, EasyList and EasyPrivacy lists",

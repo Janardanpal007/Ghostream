@@ -157,7 +157,7 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
 
     @JavascriptInterface
     fun popupBlocked(@Suppress("UNUSED_PARAMETER") url: String) {
-        main.post { tab.blocked++; BrowserStore.countBlocked() }
+        main.post { tab.recordBlock(url, BlockKind.POPUP); BrowserStore.countBlocked() }
     }
 
     /** A video playlist the page loaded, recognised by its content (sites often hide the usual .m3u8 name). */
@@ -401,7 +401,8 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                 val engine = Filters.engine
                 val verdict = engine?.blockOrRedirect(s2, state.topUrl, typeOf(request))
                 if (verdict != null) {
-                    view.post { blocked++; BrowserStore.countBlocked() }
+                    val kind = if (verdict.isEmpty()) BlockKind.AD else BlockKind.REDIRECT
+                    view.post { recordBlock(s2, kind); BrowserStore.countBlocked() }
                     // Stand-ins (a fake analytics.js) are for script tags and images, which always GET. A HEAD or POST
                     // comes from fetch() or XMLHttpRequest, where a plain failure is the clearer answer.
                     val standIn = verdict.takeIf { request.method.equals("GET", ignoreCase = true) } ?: ""
@@ -429,7 +430,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                 // intent:, market:, tel: and the like open in the app that handles them, when the user tapped.
                 // An ad that tries to open another app is stopped, as the ad blocker stops ad pop-ups.
                 val adOpensApp = state.blocking() && Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true
-                if (adOpensApp) { blocked++; BrowserStore.countBlocked(); return true }
+                if (adOpensApp) { recordBlock(target, BlockKind.REDIRECT); BrowserStore.countBlocked(); return true }
                 if (request.hasGesture()) runCatching {
                     val intent = if (target.startsWith("intent:")) android.content.Intent.parseUri(target, android.content.Intent.URI_INTENT_SCHEME)
                     else android.content.Intent(android.content.Intent.ACTION_VIEW, request.url)
@@ -445,7 +446,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             if (!request.hasGesture() && state.blocking() &&
                 Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true
             ) {
-                blocked++
+                recordBlock(target, BlockKind.REDIRECT)
                 BrowserStore.countBlocked()
                 return true
             }
@@ -453,7 +454,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
             val sameSite = { a: String, b: String -> site(a) == site(b) }
             if (state.popupsBlocked() && android.os.SystemClock.uptimeMillis() - windowOpenedAt < TAB_UNDER_MS && !sameSite(target, state.topUrl)) {
-                blocked++
+                recordBlock(target, BlockKind.POPUP)
                 BrowserStore.countBlocked()
                 return true
             }
@@ -584,7 +585,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
         // the same site.
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
             val blocking = state.popupsBlocked()
-            fun stopped(target: String) { blocked++; BrowserStore.countBlocked(); blockedPopup = target }
+            fun stopped(target: String) { recordBlock(target, BlockKind.POPUP); BrowserStore.countBlocked(); blockedPopup = target }
             fun open(target: String) {
                 if (blocking && Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true) stopped(target)
                 else { windowOpenedAt = android.os.SystemClock.uptimeMillis(); host.openTab(target, tab) }
