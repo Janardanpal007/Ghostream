@@ -140,6 +140,8 @@ class BrowserTab(
     var upgradedFrom: String? = null
     var lastUsed = System.currentTimeMillis()
     var web: WebView? = null
+    /** For a window a page opened: decides on its first page whether it's a blocked pop-up (true = close it). */
+    internal var popupCheck: ((String) -> Boolean)? = null
 
     val secure get() = url.startsWith("https://")
 

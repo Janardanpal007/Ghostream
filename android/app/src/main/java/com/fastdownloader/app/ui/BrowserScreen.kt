@@ -177,6 +177,8 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
             override fun openTab(url: String, from: BrowserTab) {
                 managerRef[0]?.open(url, from.private, parent = from)
             }
+            override fun openWindow(from: BrowserTab) = managerRef[0]?.openWindow(from)
+            override fun closeTab(tab: BrowserTab) { managerRef[0]?.close(tab) }
             override fun showFullScreen(view: View, callback: WebChromeClient.CustomViewCallback) {
                 BrowserChrome.fullScreen?.second?.onCustomViewHidden()
                 BrowserChrome.fullScreen = view to callback

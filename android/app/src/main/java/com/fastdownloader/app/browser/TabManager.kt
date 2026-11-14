@@ -52,6 +52,12 @@ class TabManager(private val ctx: Context, private val host: TabHost) {
         return tab
     }
 
+    /** A tab for a window the page in [parent] opened, with its WebView made but nothing loaded. */
+    fun openWindow(parent: BrowserTab): Pair<BrowserTab, WebView> {
+        val tab = open("", parent.private, parent)
+        return tab to webOf(tab)
+    }
+
     fun select(tab: BrowserTab) {
         current?.takeIf { it !== tab }?.capture()
         currentId = tab.id

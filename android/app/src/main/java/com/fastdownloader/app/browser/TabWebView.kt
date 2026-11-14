@@ -59,6 +59,10 @@ interface TabHost {
     val documentStart: Boolean
     fun download(tab: BrowserTab, req: AddRequest)
     fun openTab(url: String, from: BrowserTab)
+    /** A new tab for a window the page opens itself, with its WebView ready (not loading anything yet). */
+    fun openWindow(from: BrowserTab): Pair<BrowserTab, WebView>?
+    /** The page closed its own window (window.close()). */
+    fun closeTab(tab: BrowserTab)
     fun showFullScreen(view: View, callback: WebChromeClient.CustomViewCallback)
     fun hideFullScreen()
     fun longPress(tab: BrowserTab, target: LinkTarget)
@@ -539,6 +543,11 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
         }
 
         override fun onPageStarted(view: WebView, pageUrl: String, favicon: Bitmap?) {
+            val check = popupCheck
+            if (check != null && pageUrl != "about:blank") {
+                popupCheck = null
+                if (check(pageUrl)) { view.stopLoading(); view.post { host.closeTab(tab) }; return }
+            }
             loading = true
             home = false
             if (pageUrl != url) { clearPage(); tab.favicon = null; dialogTimes.clear() }
@@ -641,6 +650,8 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
         // A page opening a new window. A link the user tapped opens in a new tab. Windows a page opens by itself,
         // or from a tap somewhere else on the page (the usual "pop-under" ad trick), only open when they stay on
         // the same site.
+        override fun onCloseWindow(window: WebView) { window.post { host.closeTab(tab) } }
+
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
             val blocking = state.popupsBlocked()
             fun stopped(target: String) { recordBlock(target, BlockKind.POPUP); BrowserStore.countBlocked(); blockedPopup = target }
@@ -654,24 +665,19 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             }
             if (isUserGesture && link != null && link.startsWith("http")) { open(link); return false }
             if (!isUserGesture && blocking) { stopped(""); return false }
-            // Not a link: let the window start loading in a hidden view to see where it goes.
-            val probe = WebView(view.context)
-            if (private && PrivateProfile.supported) WebViewCompat.setProfile(probe, PrivateProfile.NAME)
-            var decided = false
-            fun decide(target: String) {
-                if (decided || target.isEmpty() || target == "about:blank") return
-                decided = true
-                probe.stopLoading()
-                val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
-                if (!blocking || site(target) == site(state.topUrl)) open(target) else stopped(target)
-                probe.post { probe.destroy() }
+            // Not a link (a sign-in window, a player…): a real tab whose WebView is the new window, so the page
+            // that opened it can still talk to it (window.opener, as "Sign in with Google" needs). Where it goes
+            // is checked on its first page: another site's window is stopped while pop-ups are blocked.
+            val win = host.openWindow(tab) ?: return false
+            val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
+            val opener = state.topUrl
+            win.first.popupCheck = { target ->
+                val stop = blocking && site(target) != site(opener)
+                if (stop) stopped(target)
+                stop
             }
-            probe.webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(v: WebView, r: WebResourceRequest): Boolean { decide(r.url.toString()); return true }
-                override fun onPageStarted(v: WebView, u: String, favicon: Bitmap?) { decide(u) }
-            }
-            probe.postDelayed({ if (!decided) { decided = true; probe.destroy() } }, 10_000)
-            (resultMsg.obj as WebView.WebViewTransport).webView = probe
+            windowOpenedAt = android.os.SystemClock.uptimeMillis()
+            (resultMsg.obj as WebView.WebViewTransport).webView = win.second
             resultMsg.sendToTarget()
             return true
         }
