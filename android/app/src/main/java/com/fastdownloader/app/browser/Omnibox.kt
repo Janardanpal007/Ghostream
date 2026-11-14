@@ -19,6 +19,30 @@ object Omnibox {
 
     fun engine(id: String) = ENGINES.firstOrNull { it.id == id } ?: ENGINES[0]
 
+    /** A nickname and the site it searches: "y lofi" searches YouTube for "lofi". Shown in the address bar's tips. */
+    data class Nickname(val key: String, val name: String, val query: String)
+
+    val NICKNAMES = listOf(
+        Nickname("g", "Google", "https://www.google.com/search?q=%s"),
+        Nickname("d", "DuckDuckGo", "https://duckduckgo.com/?q=%s"),
+        Nickname("b", "Brave Search", "https://search.brave.com/search?q=%s"),
+        Nickname("y", "YouTube", "https://m.youtube.com/results?search_query=%s"),
+        Nickname("w", "Wikipedia", "https://en.m.wikipedia.org/w/index.php?search=%s"),
+        Nickname("j", "JioSaavn", "https://www.jiosaavn.com/search/song/%s"),
+        Nickname("sc", "SoundCloud", "https://m.soundcloud.com/search?q=%s"),
+        Nickname("sp", "Spotify", "https://open.spotify.com/search/%s"),
+    )
+
+    /** "y lofi beats" → YouTube's results for "lofi beats"; null when the first word isn't a nickname. */
+    private fun nicknameSearch(typed: String): String? {
+        val key = typed.substringBefore(' ').lowercase()
+        val words = typed.substringAfter(' ', "").trim()
+        if (words.isEmpty()) return null
+        val nick = NICKNAMES.firstOrNull { it.key == key } ?: return null
+        // %20, not "+": several of these sites take the words in the path, where "+" is not a space.
+        return nick.query.replace("%s", URLEncoder.encode(words, "UTF-8").replace("+", "%20"))
+    }
+
     private val HOST_LIKE = Regex("""^(localhost|\[[0-9a-fA-F:]+]|(\d{1,3}\.){3}\d{1,3}|([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,63})(:\d{1,5})?([/?#].*)?$""")
 
     /**
@@ -28,6 +52,7 @@ object Omnibox {
     fun resolve(text: String, engineId: String): String? {
         val typed = text.trim()
         if (typed.isEmpty()) return null
+        nicknameSearch(typed)?.let { return it }
         // "example. com" (a phone keyboard's autospace) is still an address.
         val joined = typed.replace(Regex("""\.\s+"""), ".")
         val t = if (!joined.contains(' ') && joined.contains('.')) joined else typed
