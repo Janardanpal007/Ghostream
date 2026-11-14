@@ -62,6 +62,8 @@ object Filters {
         // Spotify's web player: the Premium offer card on Home and the "Open App" button.
         "open.spotify.com##[data-testid=\"premium-banner\"]",
         "open.spotify.com##button[data-testid=\"download-button\"]",
+        // JioSaavn: the "Start JioSaavn Pro free trial" bar above the bottom menu.
+        "jiosaavn.com##.c-banner",
     )
 
     data class Status(val loading: Boolean = false, val networkRules: Int = 0, val cosmeticRules: Int = 0, val updatedAt: Long = 0, val message: String? = null)
