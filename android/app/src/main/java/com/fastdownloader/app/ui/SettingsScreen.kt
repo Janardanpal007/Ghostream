@@ -249,7 +249,8 @@ fun SettingsScreen() {
                     ThemeColorPicker(s.themeColor, dark = colors.bg == DarkPalette.bg) { v -> set { it.copy(themeColor = v) } }
                     Stepper("Page text size (%)", s.textZoom, 50..200, step = 10, hint = "Applies to tabs opened from now on") { v -> set { it.copy(textZoom = v) } }
                     Toggle("Shields totals on the start page", null, s.showHomeStats) { v -> set { it.copy(showHomeStats = v) } }
-                    Toggle("Top sites on the start page", "Your most visited sites, from history", s.showTopSites, last = true) { v -> set { it.copy(showTopSites = v) } }
+                    Toggle("Top sites on the start page", "Your most visited sites, from history", s.showTopSites) { v -> set { it.copy(showTopSites = v) } }
+                    Toggle("Tab bar", "Your open tabs in a row under the address bar", s.showTabBar, last = true) { v -> set { it.copy(showTabBar = v) } }
             }
         }
         SettingsPage.TURBO -> TurboPage()
