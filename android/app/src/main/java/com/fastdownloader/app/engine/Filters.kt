@@ -16,8 +16,14 @@ import java.io.File
  * few days (through the proxy, if one is set).
  */
 object Filters {
-    /** [dns]: a host list made for DNS blocking, whose exceptions only undo its own blocks (see [AdBlock.parse]). */
-    data class FilterList(val id: String, val name: String, val url: String, val bundled: Boolean, val dns: Boolean = false)
+    /**
+     * [dns]: a host list made for DNS blocking, whose exceptions only undo its own blocks (see [AdBlock.parse]).
+     * [cookies]: a cookie-banner list, used while "Hide cookie banners" is on.
+     */
+    data class FilterList(
+        val id: String, val name: String, val url: String, val bundled: Boolean,
+        val dns: Boolean = false, val cookies: Boolean = false,
+    )
 
     val LISTS = listOf(
         FilterList("ublock-filters", "uBlock filters", "https://ublockorigin.github.io/uAssets/filters/filters.txt", true),
@@ -36,6 +42,15 @@ object Filters {
         // Whole ad, tracker and phone-maker telemetry hosts (TikTok, Xiaomi, Oppo/Realme, Apple, Yandex…) that the
         // page-oriented lists above only block on some paths. Downloaded, not bundled: it's large.
         FilterList("adguard-dns", "AdGuard DNS filter", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt", false, dns = true),
+        // Cookie consent banners: hidden, or answered with "reject" where the site needs an answer. Downloaded.
+        FilterList(
+            "easylist-cookies", "EasyList Cookie Notices",
+            "https://ublockorigin.github.io/uAssets/thirdparties/easylist-cookies.txt", false, cookies = true,
+        ),
+        FilterList(
+            "ublock-cookies", "uBlock filters: Cookie Notices",
+            "https://ublockorigin.github.io/uAssets/filters/annoyances-cookies.txt", false, cookies = true,
+        ),
     )
 
     /** Trackers the lists above only partly cover (they block one file, or nothing, on these). */
@@ -60,7 +75,8 @@ object Filters {
     @Synchronized
     fun load(ctx: Context) {
         _status.value = _status.value.copy(loading = true)
-        val loaded = LISTS.mapNotNull { list ->
+        val hideCookies = Engine.settings.hideCookieBanners
+        val loaded = LISTS.filter { hideCookies || !it.cookies }.mapNotNull { list ->
             val f = File(dir(ctx), "${list.id}.txt")
             when {
                 f.exists() -> f.readText()

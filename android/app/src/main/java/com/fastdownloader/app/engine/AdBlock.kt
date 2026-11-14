@@ -621,6 +621,9 @@ class AdBlock private constructor() {
             names("set-session-storage-item")
             names("remove-cookie", "cookie-remover")
             names("set-cookie")
+            names("trusted-set-cookie")
+            names("trusted-set-local-storage-item")
+            names("trusted-click-element")
             names("window.name-defuser")
             names("alert-buster")
         }

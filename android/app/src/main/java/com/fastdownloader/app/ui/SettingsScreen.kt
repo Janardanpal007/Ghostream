@@ -106,6 +106,11 @@ fun SettingsScreen() {
         SettingsPage.SHIELDS -> {
             Section("Shields") {
                     Toggle("Block trackers & ads", "uBlock Origin, EasyList and EasyPrivacy filter lists", s.blockAds) { v -> set { it.copy(blockAds = v) } }
+                    val appCtx = LocalContext.current.applicationContext
+                    Toggle("Hide cookie banners", "Consent pop-ups are hidden, or answered with \"reject\" when a site insists", s.hideCookieBanners) { v ->
+                        set { it.copy(hideCookieBanners = v) }
+                        Thread { runCatching { Filters.load(appCtx) } }.start() // rebuild the blocker with or without those lists
+                    }
                     Toggle("Upgrade connections to HTTPS", "Falls back to http:// only when a site has no secure version", s.httpsUpgrade) { v -> set { it.copy(httpsUpgrade = v) } }
                     ChoiceList("Cookies", listOf("all" to "All", "block3p" to "No 3rd-party", "none" to "None"), s.cookiePolicy) { v -> set { it.copy(cookiePolicy = v) } }
                     val exceptions = (s.adblockAllow + s.popupAllow + s.httpsOffSites + s.scriptBlockSites + s.thirdPartyCookieSites).distinct()

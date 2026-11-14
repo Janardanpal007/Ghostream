@@ -564,6 +564,65 @@
     try { document.cookie = encodeURIComponent(name) + '=' + v + '; path=' + (path || '/') + '; max-age=31536000'; } catch (e) { /* blocked */ }
   }
 
+  // "trusted-" values may be anything, with uBlock's date tokens filled in.
+  function trustedValue(v) {
+    var s = v == null ? '' : String(v);
+    if (s === '$now$') return String(Date.now());
+    if (s === '$currentDate$') return new Date().toUTCString();
+    if (s === '$currentISODate$') return new Date().toISOString();
+    return s;
+  }
+  function trustedSetCookie(name, value, offset, path) {
+    if (!name) return;
+    var age = parseInt(offset, 10);
+    var parts = [encodeURIComponent(name) + '=' + encodeURIComponent(trustedValue(value)), 'path=' + (path || '/')];
+    parts.push('max-age=' + (isNaN(age) ? 31536000 : age));
+    try { document.cookie = parts.join('; '); } catch (e) { /* blocked */ }
+  }
+  function trustedSetStorage(key, value) {
+    if (!key) return;
+    try {
+      if (value === '$remove$') localStorage.removeItem(key);
+      else localStorage.setItem(key, trustedValue(value));
+    } catch (e) { /* storage blocked */ }
+  }
+
+  // Clicks each element in turn once it shows up ("Reject all", then "Save"), within 10 seconds. Cookie banners
+  // that only go away through their own buttons. [extra] like "cookie:name" or "localStorage:key" skips the clicking
+  // when that isn't set.
+  function clickElements(selectors, extra, delay) {
+    if (!selectors) return;
+    var cond = String(extra || '').split(/\s*,\s*/).filter(Boolean);
+    for (var c = 0; c < cond.length; c++) {
+      var m = /^(cookie|localStorage):(.+)$/.exec(cond[c]);
+      if (!m) continue;
+      var re = pat(m[2]);
+      var found = m[1] === 'cookie'
+        ? document.cookie.split(';').some(function (x) { return re.test(x.split('=')[0].trim()); })
+        : (function () { try { for (var i = 0; i < localStorage.length; i++) if (re.test(localStorage.key(i))) return true; } catch (e) { /* skip */ } return false; })();
+      if (!found) return;
+    }
+    var queue = String(selectors).split(/\s*,\s*/).filter(Boolean);
+    var wait = Math.min(Math.max(parseInt(delay, 10) || 1, 1), 10000);
+    var stopAt = Date.now() + 10000;
+    var obs = null;
+    function step() {
+      if (!queue.length || Date.now() > stopAt) { if (obs) obs.disconnect(); return; }
+      var el = null;
+      try { el = document.querySelector(queue[0]); } catch (e) { queue.shift(); return step(); }
+      if (!el) return;
+      queue.shift();
+      setTimeout(function () { try { el.click(); } catch (e) { /* gone */ } step(); }, wait);
+    }
+    whenDom(function () {
+      step();
+      if (!queue.length) return;
+      obs = new MutationObserver(step);
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+      setTimeout(function () { obs.disconnect(); }, 10000);
+    });
+  }
+
   // ----- the scriptlets by name (the app turns uBlock's short names into these) -----
 
   var RUN = {
@@ -607,6 +666,9 @@
     'set-session-storage-item': function (a) { setStorageItem('sessionStorage', a[0], a[1]); },
     'remove-cookie': function (a) { removeCookie(a[0]); },
     'set-cookie': function (a) { setCookie(a[0], a[1], a[2]); },
+    'trusted-set-cookie': function (a) { trustedSetCookie(a[0], a[1], a[2], a[3]); },
+    'trusted-set-local-storage-item': function (a) { trustedSetStorage(a[0], a[1]); },
+    'trusted-click-element': function (a) { clickElements(a[0], a[1], a[2]); },
     'window.name-defuser': function () { if (window === window.top) window.name = ''; },
     'alert-buster': function () { window.alert = new Proxy(window.alert, { apply: noop }); },
   };
