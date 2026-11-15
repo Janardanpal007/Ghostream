@@ -406,7 +406,6 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
                     },
                 )
                 }
-                if (settings.showTabBar && !editing) TabStrip(manager) { p -> newTab(p) }
                 if (tab.loading && !tab.home) LoadingLine(tab.progress)
             }
             if (finding && !chromeHidden && web != null && tab != null) FindBar(tab, web) { finding = false; web.clearMatches() }

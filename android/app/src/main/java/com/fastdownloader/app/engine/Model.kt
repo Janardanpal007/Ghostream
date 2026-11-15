@@ -95,8 +95,6 @@ data class Settings(
     val restoreTabs: Boolean = true,
     val showHomeStats: Boolean = true,
     val showTopSites: Boolean = true,
-    /** A row of tabs under the address bar, as on a desktop browser. */
-    val showTabBar: Boolean = true,
     /** system | light | dark */
     val themeMode: String = "system",
     /** Colour theme id from THEME_COLORS ("classic" = black/white buttons). */
