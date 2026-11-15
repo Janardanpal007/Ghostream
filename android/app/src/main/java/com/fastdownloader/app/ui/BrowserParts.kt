@@ -384,8 +384,10 @@ fun HomePage(private: Boolean, onOpen: (String) -> Unit, onSearch: () -> Unit) {
                         Stat("Time saved (est.)", duration(stats.blocked * 50 / 1000), c.accent2, Modifier.weight(1f))
                     }
                 }
+                Spacer(Modifier.height(22.dp))
+                SpeedDialGrid(onOpen)
                 if (settings.showTopSites && top.isNotEmpty()) {
-                    Spacer(Modifier.height(22.dp))
+                    Spacer(Modifier.height(18.dp))
                     SiteGrid("Top sites", top.map { it.title to it.url }, onOpen)
                 }
                 if (bookmarks.isNotEmpty()) {
@@ -413,7 +415,8 @@ private fun PrivateInfo() {
         Text("How private tabs work", style = Type.strong, color = c.privateFg)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Pages you open here aren't added to history or saved tabs. " + if (PrivateProfile.supported) {
+            "Pages you open here aren't added to history. Private tabs stay open until you close them, and open with your " +
+                "fingerprint or screen lock when that's on in Settings. " + if (PrivateProfile.supported) {
                 "Cookies, site data and cache are kept apart from normal tabs and erased when you close the last private tab."
             } else {
                 "This phone's Android System WebView is too old to keep private cookies apart from normal tabs: update it from the Play Store for full isolation."
@@ -462,7 +465,8 @@ private fun SiteGrid(title: String, sites: List<Pair<String, String>>, onOpen: (
 /** A site's first letter on a colour made from its name (no icon is fetched, so nothing leaks to the site). */
 @Composable
 fun SiteAvatar(url: String, size: Dp) {
-    val host = Omnibox.displayHost(url)
+    // Mobile sites (m.youtube.com) take the letter of the site, not of "m.".
+    val host = Omnibox.displayHost(url).removePrefix("m.")
     val hues = listOf(0xFF1D7FE6, 0xFF7C5CFF, 0xFF138A43, 0xFFE0592A, 0xFFC2185B, 0xFF00838F, 0xFF6D4C41, 0xFF5E35B1)
     val color = Color(hues[(host.hashCode() and 0x7fffffff) % hues.size])
     Box(Modifier.size(size).clip(Shape.control).background(color), contentAlignment = Alignment.Center) {

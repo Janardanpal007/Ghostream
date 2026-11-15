@@ -168,6 +168,13 @@ fun MenuSheet(
                     Toast.makeText(ctx, if (added) "Bookmarked" else "Bookmark removed", Toast.LENGTH_SHORT).show()
                     onDismiss()
                 }
+                SheetRow(Icons.Add, "Add to Speed Dial", "A tile for this site on the start page") {
+                    val root = tab.url.substringBefore("://") + "://" + (Omnibox.hostOf(tab.url) ?: "") + "/"
+                    val name = Omnibox.displayHost(tab.url).removePrefix("m.").substringBefore('.').replaceFirstChar { it.uppercase() }
+                    val added = BrowserStore.addSpeedDial(root, name)
+                    Toast.makeText(ctx, if (added) "Added to Speed Dial" else "Already on Speed Dial", Toast.LENGTH_SHORT).show()
+                    onDismiss()
+                }
                 ZoomRow(tab)
                 SheetRow(Icons.Search, "Find in page", onClick = onFind)
                 SheetRow(Icons.Article, "Reader mode", "Just the article, in clean text", onClick = onReader)
@@ -262,6 +269,7 @@ fun ShieldsSheet(tab: BrowserTab, host: String, onDismiss: () -> Unit, onSetting
         }
         Divider()
         Column(Modifier.verticalScroll(rememberScrollState())) {
+            if (!tab.home) { BlockedList(tab); Divider() }
             SheetRow(
                 Icons.Shield, if (site) "Block trackers & ads" else "Block trackers & ads on every site",
                 "uBlock Origin, EasyList and EasyPrivacy lists",

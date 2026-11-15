@@ -1,6 +1,13 @@
 package com.fastdownloader.app.ui
 
 import android.webkit.WebView
+import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +61,9 @@ var h=document.querySelector('h1');
 return JSON.stringify({title:(h&&h.innerText.trim())||document.title,site:location.hostname.replace(/^www\./,''),blocks:out.slice(0,600)});
 }catch(e){return '';}})()"""
 
+    /** Less text than this and the page is not treated as an article. */
+    private const val MIN_ARTICLE_CHARS = 500
+
     private val json = Json { ignoreUnknownKeys = true }
 
     fun extract(web: WebView, done: (ReaderDoc?) -> Unit) {
@@ -63,7 +72,7 @@ return JSON.stringify({title:(h&&h.innerText.trim())||document.title,site:locati
                 val text = Json.parseToJsonElement(result).jsonPrimitive.content
                 if (text.isEmpty()) null else json.decodeFromString(ReaderDoc.serializer(), text)
             }.getOrNull()
-            done(doc?.takeIf { it.blocks.size >= 2 })
+            done(doc?.takeIf { it.blocks.size >= 2 && it.blocks.sumOf { b -> b.x.length } >= MIN_ARTICLE_CHARS })
         }
     }
 }
@@ -71,25 +80,38 @@ return JSON.stringify({title:(h&&h.innerText.trim())||document.title,site:locati
 @Composable
 fun ReaderView(doc: ReaderDoc, onClose: () -> Unit) {
     val c = colors
+    val ctx = LocalContext.current
     var size by remember { mutableIntStateOf(18) }
+    val speech = remember(doc) { ReaderSpeech(ctx, doc.blocks.map { it.x }) }
+    DisposableEffect(speech) { onDispose { speech.release() } }
+    val listState = rememberLazyListState()
+    // Follow the block being read: items are offset by one for the title.
+    LaunchedEffect(speech.current) { if (speech.current >= 0) listState.animateScrollToItem(speech.current + 1) }
+    LaunchedEffect(speech.failed) {
+        if (speech.failed) Toast.makeText(ctx, "Read-aloud isn't available on this phone", Toast.LENGTH_SHORT).show()
+    }
     OverlayPage(
         title = doc.site,
-        onClose = onClose,
+        onClose = { speech.release(); onClose() },
         actions = {
+            val active = speech.speaking
+            RoundIcon(if (active) Icons.Pause else Icons.Volume, if (active) "Pause reading" else "Listen") { if (active) speech.pause() else speech.play() }
+            if (active || speech.current >= 0) RoundIcon(Icons.Close, "Stop reading") { speech.stop() }
             RoundIcon(Icons.Minus, "Smaller text") { size = (size - 2).coerceAtLeast(12) }
             RoundIcon(Icons.TextSize, "Larger text") { size = (size + 2).coerceAtMost(32) }
         },
     ) {
         SelectionContainer {
-            LazyColumn(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState, horizontalAlignment = Alignment.CenterHorizontally) {
                 item {
                     Text(
                         doc.title, style = Type.title.copy(fontSize = (size + 8).sp, lineHeight = (size + 14).sp), color = c.text,
                         modifier = Modifier.widthIn(max = 680.dp).fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 12.dp),
                     )
                 }
-                items(doc.blocks) { b ->
-                    val m = Modifier.widthIn(max = 680.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
+                itemsIndexed(doc.blocks) { index, b ->
+                    val base = Modifier.widthIn(max = 680.dp).fillMaxWidth()
+                    val m = (if (index == speech.current) base.background(c.accentSoft) else base).padding(horizontal = 20.dp, vertical = 6.dp)
                     when (b.t) {
                         "h" -> Text(b.x, style = Type.heading.copy(fontSize = (size + 3).sp), color = c.text, modifier = m.padding(top = 10.dp))
                         "pre" -> Text(b.x, style = Type.small.copy(fontSize = (size - 4).sp), color = c.text, modifier = m)

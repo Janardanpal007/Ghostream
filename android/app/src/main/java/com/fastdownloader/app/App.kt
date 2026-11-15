@@ -10,6 +10,7 @@ import android.webkit.WebSettings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.fastdownloader.app.engine.Engine
+import com.fastdownloader.app.engine.Filters
 import com.fastdownloader.app.engine.Net
 import com.fastdownloader.app.engine.Status
 import com.fastdownloader.app.engine.Updater
@@ -30,6 +31,8 @@ class App : Application() {
         createChannels()
         Engine.init(this)
         Engine.onActive = { DownloadService.ensureRunning(this) }
+        // Get ad blocking ready as early as possible (from the saved snapshot when the lists haven't changed), off the main thread.
+        scope.launch { runCatching { Filters.load(this@App) } }
 
         scope.launch {
             Engine.finished.collect { v ->

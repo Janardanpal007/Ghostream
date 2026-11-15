@@ -7,6 +7,7 @@
  *  3. Video playlists the page loads under other names, found by their content, for downloading.
  *  4. Video mode: with the phone turned sideways, the playing video fills the screen.
  *  5. YouTube without Shorts (a setting).
+ *  6. Fingerprinting protection and Data saver (settings; parts 0c and 0d).
  */
 (function () {
   'use strict';
@@ -15,14 +16,187 @@
   var B = window.__fdBridge;
   if (!B) return;
 
+  // ---------- 0c. Fingerprinting protection ----------
+  // Sites recognise a phone by tiny differences in how it draws, plays audio and reports its hardware. With the
+  // setting on (and Shields up for the site) readbacks get a few barely visible changes that stay the same for
+  // this site during this run, the graphics card is reported generically, and hardware figures are rounded.
+  (function () {
+    var seed = 0;
+    try { seed = B.fingerprintSeed ? parseInt(B.fingerprintSeed(), 10) >>> 0 : 0; } catch (e) { /* older app */ }
+    if (!seed) return;
+    var MAX_CANVAS_PIXELS = 4000000;
+    // A fixed hash of (seed, position): the same pixel always gets the same change.
+    function h(i) {
+      var x = (i ^ seed) >>> 0;
+      x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
+      x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
+      return (x ^ (x >>> 16)) >>> 0;
+    }
+    function noisyPixels(data) {
+      for (var i = 0; i < data.length; i += 4) {
+        var n = h(i >> 2);
+        if ((n & 7) !== 0) continue;
+        var c = (n >> 3) % 3;
+        data[i + c] = Math.max(0, Math.min(255, data[i + c] + (((n >> 5) & 1) ? 1 : -1)));
+      }
+    }
+    var C2D = window.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype;
+    var origGet = C2D && C2D.getImageData;
+    if (origGet) {
+      C2D.getImageData = function () {
+        var img = origGet.apply(this, arguments);
+        try { noisyPixels(img.data); } catch (e) { /* leave as read */ }
+        return img;
+      };
+    }
+    // toDataURL and toBlob: the same picture, drawn on a copy that carries the changes.
+    function noisyCopy(canvas) {
+      if (!origGet || !canvas.width || !canvas.height || canvas.width * canvas.height > MAX_CANVAS_PIXELS) return null;
+      try {
+        var copy = document.createElement('canvas');
+        copy.width = canvas.width; copy.height = canvas.height;
+        var ctx = copy.getContext('2d');
+        ctx.drawImage(canvas, 0, 0);
+        var img = origGet.call(ctx, 0, 0, copy.width, copy.height);
+        noisyPixels(img.data);
+        ctx.putImageData(img, 0, 0);
+        return copy;
+      } catch (e) { return null; } // a canvas holding another site's picture can't be read: left as it is
+    }
+    var CV = window.HTMLCanvasElement && HTMLCanvasElement.prototype;
+    ['toDataURL', 'toBlob'].forEach(function (name) {
+      var orig = CV && CV[name];
+      if (typeof orig !== 'function') return;
+      CV[name] = function () {
+        var copy = noisyCopy(this);
+        return orig.apply(copy || this, arguments);
+      };
+    });
+    // Graphics card name.
+    [window.WebGLRenderingContext, window.WebGL2RenderingContext].forEach(function (G) {
+      var orig = G && G.prototype.getParameter;
+      if (!orig) return;
+      G.prototype.getParameter = function (p) {
+        if (p === 0x9245) return 'Google Inc.';
+        if (p === 0x9246) return 'ANGLE (Generic GPU)';
+        return orig.apply(this, arguments);
+      };
+    });
+    // Audio: each channel of a buffer changes once, a hair below what anyone can hear.
+    var AB = window.AudioBuffer && AudioBuffer.prototype;
+    var origChannel = AB && AB.getChannelData;
+    if (origChannel) {
+      var done = new WeakSet();
+      AB.getChannelData = function () {
+        var data = origChannel.apply(this, arguments);
+        if (!done.has(data)) {
+          done.add(data);
+          for (var i = 0; i < data.length; i += 97) data[i] += ((h(i) & 1) ? 1 : -1) * 1e-7;
+        }
+        return data;
+      };
+    }
+    // Hardware figures: 4 to 8 cores, 8 GB, and no battery details.
+    function define(name, value) {
+      try { Object.defineProperty(Navigator.prototype, name, { configurable: true, enumerable: true, get: function () { return value; } }); }
+      catch (e) { /* not changeable here */ }
+    }
+    var cores = navigator.hardwareConcurrency || 4;
+    define('hardwareConcurrency', Math.min(8, Math.max(4, cores - (cores % 2))));
+    define('deviceMemory', 8);
+    try { delete Navigator.prototype.getBattery; } catch (e) { /* stays */ }
+  })();
+
+  // ---------- 0d. Data saver ----------
+  // On mobile data with Data saver on: videos don't start by themselves (only after a tap or key press), videos
+  // load nothing until played, and the page's prefetch / preload hints are dropped. YouTube quality is lowered by the app.
+  (function () {
+    var on = false;
+    try { on = !!(B.dataSaver && B.dataSaver()); } catch (e) { /* older app */ }
+    if (!on) return;
+    var lastGesture = 0;
+    var GESTURE_MS = 5000;
+    ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(function (t) {
+      window.addEventListener(t, function (e) { if (e.isTrusted) lastGesture = Date.now(); }, true);
+    });
+    function userStarted() {
+      if (navigator.userActivation && navigator.userActivation.isActive) return true;
+      return Date.now() - lastGesture < GESTURE_MS;
+    }
+    document.addEventListener('play', function (e) {
+      var m = e.target;
+      if (m && m.pause && !userStarted()) m.pause();
+    }, true);
+    var HINTS = /(^|\s)(prefetch|prerender|preload|modulepreload)(\s|$)/i;
+    function tidy(root) {
+      var nodes = root.querySelectorAll ? root.querySelectorAll('link[rel], video, audio') : [];
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (n.tagName === 'LINK') { if (HINTS.test(n.getAttribute('rel') || '')) n.remove(); }
+        else if (n.preload !== 'none' && !n.autoplay) n.preload = 'none';
+      }
+    }
+    tidy(document);
+    new MutationObserver(function (list) {
+      list.forEach(function (r) { r.addedNodes.forEach(function (n) { if (n.nodeType === 1) { tidy(n); if (n.tagName === 'LINK' || n.tagName === 'VIDEO' || n.tagName === 'AUDIO') tidy({ querySelectorAll: function () { return [n]; } }); } }); });
+    }).observe(document, { childList: true, subtree: true });
+  })();
+
+  // ---------- 0e. Spotify audio ads ----------
+  // Spotify's web player puts its ads in the play queue from its own servers, so blocking them breaks playback.
+  // Instead, while the player shows "Advertisement" (and Shields are up), the ad plays muted; sound comes back
+  // for the next song. (Speeding the ad up makes the player stall on the next song, so its speed is left alone.)
+  // Its players are never added to the page, so they're noted when they start playing.
+  if (location.hostname === 'open.spotify.com' && window.HTMLMediaElement) (function () {
+    var CHECK_MS = 400;
+    var players = new Set();
+    var origPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () { players.add(this); return origPlay.apply(this, arguments); };
+    var AD_XPATH = "//*[not(*)][normalize-space(text())='Advertisement']";
+    function adShowing() {
+      if (/^Advertisement\b/i.test(document.title)) return true;
+      try {
+        var r = document.evaluate(AD_XPATH, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+        for (var i = 0; i < r.snapshotLength; i++) if (r.snapshotItem(i).getClientRects().length) return true;
+      } catch (e) { /* no XPath here */ }
+      return false;
+    }
+    function shieldsUp() { try { return !!B.cosmeticBase(location.href); } catch (e) { return false; } }
+    var skipping = false;
+    setInterval(function () {
+      var ad = adShowing() && shieldsUp();
+      if (!ad && !skipping) return;
+      players.forEach(function (m) {
+        try {
+          if (ad) {
+            if (!m.__fdAd) m.__fdAd = { muted: m.muted };
+            m.muted = true;
+          } else if (m.__fdAd) {
+            m.muted = m.__fdAd.muted;
+            delete m.__fdAd;
+          }
+        } catch (e) { /* player gone */ }
+      });
+      skipping = ad;
+    }, CHECK_MS);
+  })();
+
   // ---------- 0b. Full screen without a pause ----------
   // Going in or out of full screen, the WebView moves the video to another view and, for a moment, the page
   // counts as hidden. YouTube unloads the video then (a black screen, paused). For 3 seconds after a page asks
-  // for full screen or leaves it, the page stays "visible". Leaving the app is not affected.
+  // for full screen or leaves it, the page stays "visible". With background play on (the default), it also stays
+  // "visible" while a video or song plays, so leaving the app or turning the screen off doesn't pause it.
   (function () {
     var holdUntil = 0;
+    var bgPlay = false;
+    try { bgPlay = !!B.backgroundPlay(); } catch (e) { /* older app */ }
     function hold() { holdUntil = Date.now() + 3000; }
-    function held() { return Date.now() < holdUntil; }
+    function mediaPlaying() {
+      var ms = document.querySelectorAll('video, audio');
+      for (var i = 0; i < ms.length; i++) if (!ms[i].paused && !ms[i].ended) return true;
+      return false;
+    }
+    function held() { return Date.now() < holdUntil || (bgPlay && mediaPlaying()); }
     function wrap(proto, name) {
       var f = proto && proto[name];
       if (typeof f !== 'function') return;
@@ -159,7 +333,16 @@
 
   // ---------- 1. element hiding ----------
   var style = null;
+  // Preferred: a constructed sheet in document.adoptedStyleSheets. Sites that rebuild <head> (Spotify, other
+  // React apps) delete an added <style> tag and every rule in it; an adopted sheet survives that. It's put back if
+  // the page replaces the adopted list.
+  var adopted = null;
+  try { if ('adoptedStyleSheets' in document && typeof CSSStyleSheet === 'function') adopted = new CSSStyleSheet(); } catch (e) { adopted = null; }
   function sheet() {
+    if (adopted) {
+      if (document.adoptedStyleSheets.indexOf(adopted) < 0) document.adoptedStyleSheets = document.adoptedStyleSheets.concat([adopted]);
+      return adopted;
+    }
     if (!style) {
       style = document.createElement('style');
       style.setAttribute('data-fd', '');
@@ -206,6 +389,7 @@
   }
   function flush() {
     timer = 0;
+    if (adopted) sheet(); // the page may have replaced its adopted sheets since
     if (!pending.length) return;
     var batch = pending.join(' ');
     pending = [];
@@ -213,7 +397,20 @@
   }
   function later() { if (!timer) timer = setTimeout(flush, 200); }
 
-  try { hide(B.cosmeticBase(location.href)); } catch (e) { /* bridge gone */ }
+  // A link can start the app and load its page before the blocker has finished loading (then the answer is
+  // empty). Ask again for a while; once it answers, look over the whole page again for site-specific rules.
+  var BASE_RETRIES = 20, BASE_RETRY_MS = 500;
+  function applyBase(tries) {
+    var text = '';
+    try { text = B.cosmeticBase(location.href); } catch (e) { return; } // bridge gone
+    if (text) {
+      hide(text);
+      if (tries > 0 && document.documentElement) { seen = Object.create(null); scan(document.documentElement); flush(); }
+    } else if (tries < BASE_RETRIES) {
+      setTimeout(function () { applyBase(tries + 1); }, BASE_RETRY_MS);
+    }
+  }
+  applyBase(0);
 
   // ---------- 1b. procedural hiding: "div:has-text(Sponsored):upward(2)", ":remove()", ":style()"… ----------
   var PROC_OP = /^:(has-text|-abp-contains|-abp-has|upward|nth-ancestor|remove|matches-css-before|matches-css-after|matches-css|min-text-length|xpath|matches-path|style)\(/;

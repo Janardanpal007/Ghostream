@@ -101,6 +101,8 @@ object BrowserChrome {
     var playing = false
     /** The WebView on screen, for the video controls. */
     var activeWeb: WebView? = null
+    /** The tab on screen is private: background playback shows no title or site for it. */
+    var activePrivate = false
     /** A link another app asked to open: shown in a new tab. */
     var openUrl by mutableStateOf<String?>(null)
     /** Set by MainActivity: shows the system file picker for a page's upload button. */
@@ -175,6 +177,8 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
             override fun openTab(url: String, from: BrowserTab) {
                 managerRef[0]?.open(url, from.private, parent = from)
             }
+            override fun openWindow(from: BrowserTab) = managerRef[0]?.openWindow(from)
+            override fun closeTab(tab: BrowserTab) { managerRef[0]?.close(tab) }
             override fun showFullScreen(view: View, callback: WebChromeClient.CustomViewCallback) {
                 BrowserChrome.fullScreen?.second?.onCustomViewHidden()
                 BrowserChrome.fullScreen = view to callback
@@ -199,6 +203,7 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
     val tab = manager.current
     val web = tab?.takeIf { !it.home }?.web
     BrowserChrome.activeWeb = web
+    BrowserChrome.activePrivate = tab?.private == true
     BrowserChrome.playing = visible && tab?.playing == true
     val barColor = if (tab == null || !visible || BrowserChrome.videoMode || BrowserChrome.pip || editing) null
         else if (tab.private) colors.privateBg else colors.panel
@@ -334,13 +339,40 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
     val siteAllowed = pageHost.isNotEmpty() && settings.adblockAllow.any { Omnibox.matchesSite(pageHost, it) }
     val videoCount = tab?.videosByFrame?.values?.sum() ?: 0
     val private = tab?.private == true
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+
+    /** The address-bar download button's action, also used by the playback notification's Download button. */
+    fun downloadCurrent(t: BrowserTab) {
+        when {
+            videoCount > 0 -> startDownload(AddRequest(t.url, t.headersFor(t.url, t.url), fromBrowser = true))
+            t.media.isNotEmpty() && !t.home -> showMedia = !showMedia
+            else -> BrowserChrome.downloadsSheet = true
+        }
+    }
+
+    /** Moves to the next (+1) or previous (-1) tab of the same kind (normal or private), with a haptic tick. */
+    fun switchTab(step: Int) {
+        val current = manager.current ?: return
+        val same = manager.tabs.filter { it.private == current.private }
+        val target = same.getOrNull(same.indexOf(current) + step) ?: return
+        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+        manager.select(target)
+    }
+
+    // The playback notification's Download button asked for the playing page's download.
+    val notificationDownload = com.fastdownloader.app.service.PlaybackService.downloadRequested
+    LaunchedEffect(notificationDownload, tab?.id) {
+        if (!notificationDownload) return@LaunchedEffect
+        com.fastdownloader.app.service.PlaybackService.downloadRequested = false
+        tab?.let { downloadCurrent(it) }
+    }
     // A video fills the screen or the picture-in-picture window: no browser bars.
     val chromeHidden = BrowserChrome.videoMode || BrowserChrome.pip
 
     Box(Modifier.fillMaxSize().background(if (private) c.privateBg else c.bg)) {
         Column(Modifier.fillMaxSize()) {
             if (!chromeHidden && tab != null) {
-                AddressBar(
+                Box(Modifier.swipeTabs { switchTab(it) }) { AddressBar(
                     tab = tab,
                     editing = editing,
                     address = address,
@@ -366,19 +398,14 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
                     onShields = { editing = false; focus.clearFocus(); showShields = true },
                     downloads = {
                         DownloadsButton(
-                            onClick = {
-                                when {
-                                    videoCount > 0 -> startDownload(AddRequest(tab.url, tab.headersFor(tab.url, tab.url), fromBrowser = true))
-                                    tab.media.isNotEmpty() && !tab.home -> showMedia = !showMedia
-                                    else -> BrowserChrome.downloadsSheet = true
-                                }
-                            },
+                            onClick = { downloadCurrent(tab) },
                             onLongClick = onDownloads,
                             videos = videoCount,
                             found = !tab.home && (videoCount > 0 || tab.media.isNotEmpty()),
                         )
                     },
                 )
+                }
                 if (tab.loading && !tab.home) LoadingLine(tab.progress)
             }
             if (finding && !chromeHidden && web != null && tab != null) FindBar(tab, web) { finding = false; web.clearMatches() }
@@ -436,7 +463,7 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
             if (!chromeHidden && tab != null && !editing) {
                 PopupBar(tab) { url -> manager.open(url, tab.private, parent = tab) }
                 LoginBar(tab, web)
-                BottomBar(
+                Box(Modifier.swipeTabs { switchTab(it) }) { BottomBar(
                     tab = tab,
                     tabCount = manager.count(tab.private),
                     canBack = canGoBack,
@@ -445,7 +472,7 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
                     onHome = { goHome(tab) },
                     onTabs = { tab.capture(); showTabs = true },
                     onMenu = { showMenu = true },
-                )
+                ) }
             }
         }
 
@@ -482,7 +509,7 @@ fun BrowserScreen(visible: Boolean, onDownload: (AddRequest) -> Unit, onDownload
                     val w = tab.web ?: return@MenuSheet
                     Reader.extract(w) { doc ->
                         if (doc != null) reader = doc
-                        else Toast.makeText(ctx, "No article found on this page", Toast.LENGTH_SHORT).show()
+                        else Toast.makeText(ctx, "This page doesn't look like an article", Toast.LENGTH_SHORT).show()
                     }
                 },
                 onWritingCheck = {

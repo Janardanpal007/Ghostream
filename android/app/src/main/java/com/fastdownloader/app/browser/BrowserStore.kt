@@ -23,7 +23,7 @@ data class Bookmark(val url: String, val title: String, val addedAt: Long = Syst
 @Serializable
 data class Visit(val url: String, val title: String, val at: Long = System.currentTimeMillis())
 
-/** An open tab as saved for the next start. Private tabs are never saved. */
+/** An open tab as saved for the next start (private tabs too, kept until the user closes them). */
 @Serializable
 data class SavedTab(
     val url: String,
@@ -34,9 +34,16 @@ data class SavedTab(
 )
 
 @Serializable
-data class Session(val tabs: List<SavedTab> = emptyList(), val current: Int = 0)
+data class Session(
+    val tabs: List<SavedTab> = emptyList(),
+    val current: Int = 0,
+    /** Open private tabs: they stay until the user closes them, like normal tabs (behind the lock, if it's on). */
+    val privateTabs: List<SavedTab> = emptyList(),
+    /** Index in [privateTabs] of the tab on screen, or -1 when a normal tab was on screen. */
+    val currentPrivate: Int = -1,
+)
 
-/** Totals for the start page. */
+/** Totals for the start page since the app opened (not saved: they start at 0 each time). */
 @Serializable
 data class BrowserStats(val blocked: Long = 0, val httpsUpgrades: Long = 0)
 
@@ -50,6 +57,8 @@ object BrowserStore {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var dir: File
     private val pending = HashMap<String, Job>()
+    // The newest content waiting to be written, per file.
+    private val waiting = HashMap<String, () -> String>()
 
     private val _bookmarks = MutableStateFlow<List<Bookmark>>(emptyList())
     val bookmarks: StateFlow<List<Bookmark>> = _bookmarks.asStateFlow()
@@ -57,6 +66,9 @@ object BrowserStore {
     val history: StateFlow<List<Visit>> = _history.asStateFlow()
     private val _stats = MutableStateFlow(BrowserStats())
     val stats: StateFlow<BrowserStats> = _stats.asStateFlow()
+    private val _speedDials = MutableStateFlow<List<Bookmark>>(emptyList())
+    /** The start page's Speed Dial tiles, in the order shown. */
+    val speedDials: StateFlow<List<Bookmark>> = _speedDials.asStateFlow()
     var session = Session()
         private set
 
@@ -64,9 +76,47 @@ object BrowserStore {
         if (::dir.isInitialized) return
         dir = File(ctx.filesDir, "browser").apply { mkdirs() }
         _bookmarks.value = read("bookmarks.json", ListSerializer(Bookmark.serializer())) ?: emptyList()
+        _speedDials.value = read("speeddial.json", ListSerializer(Bookmark.serializer())) ?: DEFAULT_SPEED_DIALS
         _history.value = read("history.json", ListSerializer(Visit.serializer())) ?: emptyList()
-        _stats.value = read("stats.json", BrowserStats.serializer()) ?: BrowserStats()
+        // The blocked count is for this run of the app: it starts at 0 each time the app opens (older versions kept it).
+        File(dir, "stats.json").delete()
         session = read("session.json", Session.serializer()) ?: Session()
+    }
+
+    // ---------- speed dial ----------
+
+    private val DEFAULT_SPEED_DIALS = listOf(
+        Bookmark("https://www.google.com/", "Google", 0),
+        Bookmark("https://m.youtube.com/", "YouTube", 0),
+        Bookmark("https://www.jiosaavn.com/", "JioSaavn", 0),
+        Bookmark("https://m.soundcloud.com/", "SoundCloud", 0),
+    )
+
+    /** Adds a tile at the end; false when that address is already on the Speed Dial. */
+    fun addSpeedDial(url: String, title: String): Boolean {
+        if (_speedDials.value.any { it.url == url }) return false
+        setSpeedDials(_speedDials.value + Bookmark(url, title.ifBlank { url }))
+        return true
+    }
+
+    fun removeSpeedDial(url: String) = setSpeedDials(_speedDials.value.filterNot { it.url == url })
+
+    fun renameSpeedDial(url: String, title: String) =
+        setSpeedDials(_speedDials.value.map { if (it.url == url) it.copy(title = title.ifBlank { it.title }) else it })
+
+    /** Moves a tile [by] places (negative: towards the start), staying inside the list. */
+    fun moveSpeedDial(url: String, by: Int) {
+        val list = _speedDials.value
+        val from = list.indexOfFirst { it.url == url }
+        if (from < 0) return
+        val to = (from + by).coerceIn(0, list.lastIndex)
+        if (to == from) return
+        setSpeedDials(list.toMutableList().apply { add(to, removeAt(from)) })
+    }
+
+    private fun setSpeedDials(list: List<Bookmark>) {
+        _speedDials.value = list
+        saveLater("speeddial.json") { json.encodeToString(ListSerializer(Bookmark.serializer()), _speedDials.value) }
     }
 
     // ---------- bookmarks ----------
@@ -155,19 +205,40 @@ object BrowserStore {
 
     // ---------- session and counters ----------
 
+    /** Set while the app is leaving with "clear on exit" on: nothing is written again until the app reopens. */
+    @Volatile private var wiped = false
+
+    /** The app opened again after a wipe (the process was kept): saving works as usual. */
+    fun resume() { wiped = false }
+
+    /** Forgets history and the saved tabs, in memory and on disk now. Bookmarks stay. */
+    @Synchronized
+    fun wipeAll() {
+        wiped = true
+        pending.values.forEach { it.cancel() }
+        pending.clear()
+        waiting.clear()
+        _history.value = emptyList()
+        session = Session()
+        if (!::dir.isInitialized) return
+        listOf("history.json", "session.json").forEach { name ->
+            val f = File(dir, name)
+            if (f.exists() && !f.delete()) android.util.Log.w("BrowserStore", "Could not delete $name")
+        }
+    }
+
     fun saveSession(s: Session) {
+        if (wiped) return
         session = s
         saveLater("session.json", 400) { json.encodeToString(Session.serializer(), s) }
     }
 
     fun countBlocked(n: Int = 1) {
         _stats.update { it.copy(blocked = it.blocked + n) }
-        saveLater("stats.json", 3000) { json.encodeToString(BrowserStats.serializer(), _stats.value) }
     }
 
     fun countHttpsUpgrade() {
         _stats.update { it.copy(httpsUpgrades = it.httpsUpgrades + 1) }
-        saveLater("stats.json", 3000) { json.encodeToString(BrowserStats.serializer(), _stats.value) }
     }
 
     // ---------- files ----------
@@ -178,21 +249,43 @@ object BrowserStore {
         return runCatching { json.decodeFromString(serializer, f.readText()) }.getOrNull()
     }
 
-    /** Several quick changes are written once. */
+    /**
+     * Several quick changes are written once, at most [delayMs] after the first. The wait isn't restarted by later
+     * changes: a page blocking a tracker every second would otherwise put the save off until the app is closed.
+     */
     @Synchronized
     private fun saveLater(name: String, delayMs: Long = 800, text: () -> String) {
-        if (!::dir.isInitialized) return
-        pending[name]?.cancel()
+        if (!::dir.isInitialized || wiped) return
+        waiting[name] = text
+        if (pending[name]?.isActive == true) return // it writes the newest content when it runs
         pending[name] = scope.launch {
             delay(delayMs)
-            val content = text()
-            synchronized(this@BrowserStore) {
-                val tmp = File(dir, "$name.tmp")
-                tmp.writeText(content)
-                if (!tmp.renameTo(File(dir, name))) {
-                    File(dir, name).delete()
-                    tmp.renameTo(File(dir, name))
-                }
+            synchronized(this@BrowserStore) { pending.remove(name) } // changes from here on get a save of their own
+            write(name)
+        }
+    }
+
+    /** Writes everything still waiting now: the app is leaving the screen, and Android may end it without warning. */
+    fun flush() {
+        if (!::dir.isInitialized) return
+        val names = synchronized(this) {
+            pending.values.forEach { it.cancel() }
+            pending.clear()
+            waiting.keys.toList()
+        }
+        scope.launch { names.forEach { write(it) } }
+    }
+
+    private fun write(name: String) {
+        if (wiped) return
+        val text = synchronized(this) { waiting.remove(name) } ?: return
+        val content = text()
+        synchronized(this) {
+            val tmp = File(dir, "$name.tmp")
+            tmp.writeText(content)
+            if (!tmp.renameTo(File(dir, name))) {
+                File(dir, name).delete()
+                tmp.renameTo(File(dir, name))
             }
         }
     }

@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
 import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -29,6 +30,7 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.fastdownloader.app.BuildConfig
 import com.fastdownloader.app.engine.AdBlock
+import com.fastdownloader.app.service.PlaybackService
 import com.fastdownloader.app.engine.Categories
 import com.fastdownloader.app.engine.DeviceProfile
 import com.fastdownloader.app.engine.Engine
@@ -57,6 +59,10 @@ interface TabHost {
     val documentStart: Boolean
     fun download(tab: BrowserTab, req: AddRequest)
     fun openTab(url: String, from: BrowserTab)
+    /** A new tab for a window the page opens itself, with its WebView ready (not loading anything yet). */
+    fun openWindow(from: BrowserTab): Pair<BrowserTab, WebView>?
+    /** The page closed its own window (window.close()). */
+    fun closeTab(tab: BrowserTab)
     fun showFullScreen(view: View, callback: WebChromeClient.CustomViewCallback)
     fun hideFullScreen()
     fun longPress(tab: BrowserTab, target: LinkTarget)
@@ -67,6 +73,14 @@ interface TabHost {
 }
 
 private val MEDIA = Regex("""\.(m3u8|mpd|mp4|m4v|webm|mkv|mov|mp3|m4a|aac|ogg|opus|flac)(\?|#|$)""", RegexOption.IGNORE_CASE)
+
+/** YouTube's 480p level, what Data saver asks for on mobile data. */
+private const val DATA_SAVER_QUALITY = "large"
+
+/** Different on every run of the app: part of the fingerprint noise seed. */
+private val SESSION_SEED: String = java.util.UUID.randomUUID().toString()
+
+private fun dataSaverOn(): Boolean = Engine.settings.dataSaver && Engine.metered
 
 /** Sites whose https:// version failed this run: they're loaded over http:// as asked. */
 private val httpsFailed = java.util.Collections.synchronizedSet(HashSet<String>())
@@ -156,7 +170,7 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
 
     @JavascriptInterface
     fun popupBlocked(@Suppress("UNUSED_PARAMETER") url: String) {
-        main.post { tab.blocked++; BrowserStore.countBlocked() }
+        main.post { tab.recordBlock(url, BlockKind.POPUP); BrowserStore.countBlocked() }
     }
 
     /** A video playlist the page loaded, recognised by its content (sites often hide the usual .m3u8 name). */
@@ -218,11 +232,19 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
 
     @JavascriptInterface
     fun playing(on: Boolean) {
-        main.post { tab.playing = on }
+        main.post {
+            tab.playing = on
+            // Started while the app is on screen (Android doesn't allow it later), so it can keep playing after.
+            if (on && Engine.settings.backgroundPlay) tab.web?.context?.let { PlaybackService.start(it) }
+        }
     }
 
     @JavascriptInterface
     fun hideShorts(): Boolean = Engine.settings.hideShorts
+
+    /** Whether a playing video or song should keep playing when the app leaves the screen (assets/page.js, part 0b). */
+    @JavascriptInterface
+    fun backgroundPlay(): Boolean = Engine.settings.backgroundPlay
 
     /** YouTube ad removal is part of ad blocking: off when Shields are down for the site. */
     @JavascriptInterface
@@ -232,11 +254,28 @@ private class PageBridge(private val tab: BrowserTab, private val host: TabHost)
     @JavascriptInterface
     fun youtubeQuality(): String {
         val settings = Engine.settings
+        if (dataSaverOn()) return DATA_SAVER_QUALITY
         return when (val choice = Turbo.youtubeChoice(if (Engine.metered) settings.youtubeQualityMobile else settings.youtubeQuality)) {
             "auto" -> ""
             "wifi" -> DeviceProfile.wifiQuality
             else -> choice
         }
+    }
+
+    /** Data saver is on and the phone is on mobile data (assets/page.js: no autoplay, no preloading). */
+    @JavascriptInterface
+    fun dataSaver(): Boolean = dataSaverOn()
+
+    /**
+     * A number that is the same for this site during this run of the app and different for every other site and run:
+     * the seed for fingerprint noise (assets/page.js, part 0c). "" when protection is off, or Shields are down for
+     * the site, so the page is left untouched.
+     */
+    @JavascriptInterface
+    fun fingerprintSeed(): String {
+        if (!Engine.settings.fingerprintProtection || !state.blocking()) return ""
+        val site = Omnibox.hostOf(state.topUrl)?.let { AdBlock.baseDomain(it) } ?: state.topUrl
+        return (SESSION_SEED + site).hashCode().toUInt().toString()
     }
 
     @JavascriptInterface
@@ -283,11 +322,27 @@ fun BrowserTab.applySitePolicy(url: String) {
     cookies.setAcceptCookie(s.cookiePolicy != "none")
     val thirdParty = s.cookiePolicy == "all" || (s.cookiePolicy != "none" && s.thirdPartyCookieSites.any { Omnibox.matchesSite(host, it) })
     cookies.setAcceptThirdPartyCookies(w, thirdParty)
+    applyDarkening(w)
+}
+
+/** Darkens pages that have no dark theme of their own when "Dark pages" is on and the app is dark. */
+@SuppressLint("RequiresFeature")
+private fun applyDarkening(w: WebView) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) return
+    val on = Engine.settings.forceDarkPages && appIsDark(w.context)
+    WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, on)
+}
+
+private fun appIsDark(ctx: Context): Boolean = when (Engine.settings.themeMode) {
+    "dark" -> true
+    "light" -> false
+    else -> ctx.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+        android.content.res.Configuration.UI_MODE_NIGHT_YES
 }
 
 private fun httpsAllowed(url: String): String? {
     val s = Engine.settings
-    if (!s.httpsUpgrade) return null
+    if (!s.httpsUpgrade && !s.httpsOnly) return null
     val host = Omnibox.hostOf(url) ?: return null
     if (host in httpsFailed || s.httpsOffSites.any { Omnibox.matchesSite(host, it) }) return null
     return Omnibox.httpsUpgradeOf(url)
@@ -301,6 +356,12 @@ fun BrowserTab.load(url: String) {
     val target = upgraded ?: url
     upgradedFrom = if (upgraded != null) url else null
     if (upgraded != null) BrowserStore.countHttpsUpgrade()
+    if (upgraded == null && HttpsOnly.needsWarning(url)) {
+        this.url = url
+        state.topUrl = url
+        HttpsOnly.show(this, w, url)
+        return
+    }
     applySitePolicy(target)
     if (target != this.url) clearPage()
     this.url = target
@@ -313,9 +374,21 @@ private fun BrowserTab.httpsFallback(view: WebView): Boolean {
     val original = upgradedFrom ?: return false
     upgradedFrom = null
     Omnibox.hostOf(original)?.let { httpsFailed += it }
+    if (HttpsOnly.needsWarning(original)) { HttpsOnly.show(this, view, original); return true }
     applySitePolicy(original)
     view.loadUrl(original)
     return true
+}
+
+/**
+ * A WebView that keeps playing when the app leaves the screen or the screen turns off. Chromium pauses and unloads
+ * a video once its window is hidden; while [keepPlaying] is true, the window is reported as still visible
+ * (PlaybackService keeps the app running meanwhile).
+ */
+private class KeepPlayingWebView(ctx: Context, private val keepPlaying: () -> Boolean) : WebView(ctx) {
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(if (visibility != View.VISIBLE && keepPlaying()) View.VISIBLE else visibility)
+    }
 }
 
 @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility", "RequiresFeature")
@@ -323,7 +396,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
     web?.let { return it }
     if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
     val tab = this
-    val w = WebView(ctx)
+    val w = KeepPlayingWebView(ctx) { Engine.settings.backgroundPlay && tab.playing }
     // A private tab's profile must be set before anything else touches the WebView.
     if (private && PrivateProfile.supported) {
         PrivateProfile.cookies() // creates the profile if needed
@@ -381,7 +454,8 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                 val engine = Filters.engine
                 val verdict = engine?.blockOrRedirect(s2, state.topUrl, typeOf(request))
                 if (verdict != null) {
-                    view.post { blocked++; BrowserStore.countBlocked() }
+                    val kind = if (verdict.isEmpty()) BlockKind.AD else BlockKind.REDIRECT
+                    view.post { recordBlock(s2, kind); BrowserStore.countBlocked() }
                     // Stand-ins (a fake analytics.js) are for script tags and images, which always GET. A HEAD or POST
                     // comes from fetch() or XMLHttpRequest, where a plain failure is the clearer answer.
                     val standIn = verdict.takeIf { request.method.equals("GET", ignoreCase = true) } ?: ""
@@ -404,12 +478,13 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val target = request.url.toString()
+            if (HttpsOnly.handleLink(tab, view, request.url) { dest -> applySitePolicy(dest); view.loadUrl(dest) }) return true
             if (Links.isMagnet(target)) { host.download(tab, AddRequest(target)); return true }
             if (request.url.scheme !in setOf("http", "https")) {
                 // intent:, market:, tel: and the like open in the app that handles them, when the user tapped.
                 // An ad that tries to open another app is stopped, as the ad blocker stops ad pop-ups.
                 val adOpensApp = state.blocking() && Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true
-                if (adOpensApp) { blocked++; BrowserStore.countBlocked(); return true }
+                if (adOpensApp) { recordBlock(target, BlockKind.REDIRECT); BrowserStore.countBlocked(); return true }
                 if (request.hasGesture()) runCatching {
                     val intent = if (target.startsWith("intent:")) android.content.Intent.parseUri(target, android.content.Intent.URI_INTENT_SCHEME)
                     else android.content.Intent(android.content.Intent.ACTION_VIEW, request.url)
@@ -425,7 +500,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             if (!request.hasGesture() && state.blocking() &&
                 Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true
             ) {
-                blocked++
+                recordBlock(target, BlockKind.REDIRECT)
                 BrowserStore.countBlocked()
                 return true
             }
@@ -433,7 +508,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
             val sameSite = { a: String, b: String -> site(a) == site(b) }
             if (state.popupsBlocked() && android.os.SystemClock.uptimeMillis() - windowOpenedAt < TAB_UNDER_MS && !sameSite(target, state.topUrl)) {
-                blocked++
+                recordBlock(target, BlockKind.POPUP)
                 BrowserStore.countBlocked()
                 return true
             }
@@ -461,12 +536,18 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
                     return true
                 }
             }
+            if (HttpsOnly.needsWarning(dest)) { HttpsOnly.show(tab, view, dest); return true }
             applySitePolicy(dest)
             if (clean != null) { view.loadUrl(clean); return true }
             return false
         }
 
         override fun onPageStarted(view: WebView, pageUrl: String, favicon: Bitmap?) {
+            val check = popupCheck
+            if (check != null && pageUrl != "about:blank") {
+                popupCheck = null
+                if (check(pageUrl)) { view.stopLoading(); view.post { host.closeTab(tab) }; return }
+            }
             loading = true
             home = false
             if (pageUrl != url) { clearPage(); tab.favicon = null; dialogTimes.clear() }
@@ -485,7 +566,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             if (zoom != 100) applyZoom()
             if (!host.documentStart) view.evaluateJavascript(host.pageScript, null)
             view.title?.takeIf { it.isNotBlank() }?.let { title = it }
-            if (!private) BrowserStore.updateTitle(pageUrl, title)
+            if (!private && interstitialFor != pageUrl) BrowserStore.updateTitle(pageUrl, title)
             host.navigated(tab)
         }
 
@@ -496,7 +577,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             state.topUrl = pageUrl
             canBack = view.canGoBack()
             canForward = view.canGoForward()
-            if (!private && !isReload) BrowserStore.addVisit(pageUrl, view.title ?: "")
+            if (!private && !isReload && interstitialFor != pageUrl) BrowserStore.addVisit(pageUrl, view.title ?: "")
             host.navigated(tab)
         }
 
@@ -517,7 +598,7 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
         override fun onReceivedTitle(view: WebView, t: String?) {
             if (!t.isNullOrBlank()) {
                 title = t
-                if (!private) BrowserStore.updateTitle(url, t)
+                if (!private && interstitialFor != url) BrowserStore.updateTitle(url, t)
             }
         }
 
@@ -559,12 +640,21 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             return true
         }
 
+        // Protected (DRM) music and video — Spotify, Netflix, Prime Video — need Widevine, which WebView refuses
+        // unless the app allows it. Only that is allowed; camera, microphone and the rest stay refused.
+        override fun onPermissionRequest(request: PermissionRequest) {
+            val drm = PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID
+            if (drm in request.resources) request.grant(arrayOf(drm)) else request.deny()
+        }
+
         // A page opening a new window. A link the user tapped opens in a new tab. Windows a page opens by itself,
         // or from a tap somewhere else on the page (the usual "pop-under" ad trick), only open when they stay on
         // the same site.
+        override fun onCloseWindow(window: WebView) { window.post { host.closeTab(tab) } }
+
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
             val blocking = state.popupsBlocked()
-            fun stopped(target: String) { blocked++; BrowserStore.countBlocked(); blockedPopup = target }
+            fun stopped(target: String) { recordBlock(target, BlockKind.POPUP); BrowserStore.countBlocked(); blockedPopup = target }
             fun open(target: String) {
                 if (blocking && Filters.engine?.shouldBlock(target, state.topUrl, AdBlock.Type.POPUP) == true) stopped(target)
                 else { windowOpenedAt = android.os.SystemClock.uptimeMillis(); host.openTab(target, tab) }
@@ -575,24 +665,19 @@ fun BrowserTab.createWebView(ctx: Context, host: TabHost): WebView {
             }
             if (isUserGesture && link != null && link.startsWith("http")) { open(link); return false }
             if (!isUserGesture && blocking) { stopped(""); return false }
-            // Not a link: let the window start loading in a hidden view to see where it goes.
-            val probe = WebView(view.context)
-            if (private && PrivateProfile.supported) WebViewCompat.setProfile(probe, PrivateProfile.NAME)
-            var decided = false
-            fun decide(target: String) {
-                if (decided || target.isEmpty() || target == "about:blank") return
-                decided = true
-                probe.stopLoading()
-                val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
-                if (!blocking || site(target) == site(state.topUrl)) open(target) else stopped(target)
-                probe.post { probe.destroy() }
+            // Not a link (a sign-in window, a player…): a real tab whose WebView is the new window, so the page
+            // that opened it can still talk to it (window.opener, as "Sign in with Google" needs). Where it goes
+            // is checked on its first page: another site's window is stopped while pop-ups are blocked.
+            val win = host.openWindow(tab) ?: return false
+            val site = { u: String -> AdBlock.hostOf(u.lowercase())?.let { AdBlock.baseDomain(it) } }
+            val opener = state.topUrl
+            win.first.popupCheck = { target ->
+                val stop = blocking && site(target) != site(opener)
+                if (stop) stopped(target)
+                stop
             }
-            probe.webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(v: WebView, r: WebResourceRequest): Boolean { decide(r.url.toString()); return true }
-                override fun onPageStarted(v: WebView, u: String, favicon: Bitmap?) { decide(u) }
-            }
-            probe.postDelayed({ if (!decided) { decided = true; probe.destroy() } }, 10_000)
-            (resultMsg.obj as WebView.WebViewTransport).webView = probe
+            windowOpenedAt = android.os.SystemClock.uptimeMillis()
+            (resultMsg.obj as WebView.WebViewTransport).webView = win.second
             resultMsg.sendToTarget()
             return true
         }

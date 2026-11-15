@@ -8,6 +8,16 @@ import org.junit.Test
 
 class OmniboxTest {
     @Test
+    fun nicknameThenSpaceSearchesThatSite() {
+        assertEquals("https://m.youtube.com/results?search_query=lofi%20beats", Omnibox.resolve("y lofi beats", "duckduckgo"))
+        assertEquals("https://www.jiosaavn.com/search/song/arijit%20singh", Omnibox.resolve("J arijit singh", "duckduckgo"))
+        assertEquals("https://www.google.com/search?q=kotlin", Omnibox.resolve("g kotlin", "duckduckgo"))
+        // A nickname alone, or an unknown first word, is an ordinary search.
+        assertEquals("https://duckduckgo.com/?q=y", Omnibox.resolve("y", "duckduckgo"))
+        assertEquals("https://duckduckgo.com/?q=zz+top", Omnibox.resolve("zz top", "duckduckgo"))
+    }
+
+    @Test
     fun addressesLoadAndWordsAreSearched() {
         assertEquals("https://example.com", Omnibox.resolve("example.com", "duckduckgo"))
         assertEquals("https://example.com/a?b=1", Omnibox.resolve("  example.com/a?b=1 ", "duckduckgo"))

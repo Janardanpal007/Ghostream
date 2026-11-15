@@ -71,6 +71,8 @@ data class Settings(
     val privacyHeaders: Boolean = true,
     val stripTracking: Boolean = true,
     val blockAds: Boolean = true,
+    /** Cookie consent banners are hidden or rejected (the cookie-notice filter lists; see Filters). */
+    val hideCookieBanners: Boolean = true,
     /** No Shorts on YouTube in the Browser tab: hidden from pages, and Shorts links open as normal videos. */
     val hideShorts: Boolean = true,
     /** Sites where the user turned ad blocking off (the browser's shield button). */
@@ -103,6 +105,18 @@ data class Settings(
     val desktopMode: Boolean = false,
     /** Load http:// pages over https:// when the site supports it. */
     val httpsUpgrade: Boolean = true,
+    /** Never load an http:// page without asking: a site with no secure version shows a warning first. */
+    val httpsOnly: Boolean = false,
+    /** Leaving the app clears history, cookies, cache, site storage and tabs (downloads and settings stay). */
+    val clearOnExit: Boolean = false,
+    /** Hides the details sites use to recognise this phone (canvas, WebGL, audio, hardware figures, battery). */
+    val fingerprintProtection: Boolean = true,
+    /** Private tabs open only after the fingerprint or screen lock. */
+    val lockPrivateTabs: Boolean = true,
+    /** Pages without a dark theme of their own are darkened when the app is dark. */
+    val forceDarkPages: Boolean = false,
+    /** On mobile data: lower YouTube quality, no autoplay, no preloading. */
+    val dataSaver: Boolean = false,
     /** all | block3p | none */
     val cookiePolicy: String = "block3p",
     /** Per-site Shields exceptions. */
@@ -115,6 +129,8 @@ data class Settings(
     val autoLandscape: Boolean = true,
     /** Leaving the app during a full-screen video keeps it playing in a small window. */
     val autoPip: Boolean = true,
+    /** Videos and music keep playing with the screen off or another app open (see PlaybackService). */
+    val backgroundPlay: Boolean = true,
     /** YouTube picture quality on Wi-Fi: "wifi" (the best 1080p-or-lower the phone decodes), "highest", "hd1440", "hd1080", "hd720" or "auto". */
     val youtubeQuality: String = "wifi",
     /** YouTube picture quality on mobile data: "hd1440", "hd1080", "hd720" (default), "highest" or "auto". */
